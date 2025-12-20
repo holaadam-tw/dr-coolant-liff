@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>切削液健康檢測</title>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 25px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .required {
+            color: #e74c3c;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 80px;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            color: #667eea;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏭 切削液健康檢測</h1>
+        <p class="subtitle">Dr. Coolant 智慧診斷系統</p>
+        
+        <form id="coolantForm">
+            <div class="form-group">
+                <label>🧪 pH 值<span class="required">*</span></label>
+                <input type="number" id="ph_value" step="0.1" required placeholder="例如: 8.5">
+            </div>
+
+            <div class="form-group">
+                <label>🍬 Brix 糖度<span class="required">*</span></label>
+                <input type="number" id="brix_reading" step="0.1" required placeholder="例如: 5.2">
+            </div>
+
+            <div class="form-group">
+                <label>⚙️ 機台容量(公升)<span class="required">*</span></label>
+                <input type="number" id="tank_size" required placeholder="例如: 500">
+            </div>
+
+            <div class="form-group">
+                <label>🛢️ 油品類型<span class="required">*</span></label>
+                <select id="oil_type" required>
+                    <option value="">請選擇</option>
+                    <option value="全合成">全合成 (Fully Synthetic)</option>
+                    <option value="半合成">半合成 (Semi-Synthetic)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>🧴 發泡劑測試<span class="required">*</span></label>
+                <select id="bubble_result" required>
+                    <option value="">請選擇</option>
+                    <option value="Level 1">Level 1 - 無氣泡 (安全)</option>
+                    <option value="Level 2">Level 2 - 少量氣泡 (輕微)</option>
+                    <option value="Level 3">Level 3 - 持續冒泡 (中度)</option>
+                    <option value="Level 4">Level 4 - 大量氣泡 (嚴重)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>🎨 刃天青測試<span class="required">*</span></label>
+                <select id="resazurin_color" required>
+                    <option value="">請選擇</option>
+                    <option value="藍色">🔵 藍色 (安全)</option>
+                    <option value="紫色">🟣 紫色 (輕微)</option>
+                    <option value="粉紅色">🌸 粉紅色 (中度)</option>
+                    <option value="無色透明">⚪ 無色透明 (嚴重)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>📝 其他症狀</label>
+                <textarea id="symptoms" placeholder="例如: 輕微異味、表面浮油..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>🎯 目標濃度(%)</label>
+                <input type="number" id="target_conc" step="0.1" placeholder="例如: 5.0">
+            </div>
+
+            <div class="form-group">
+                <label>⚡ 導電度(μS/cm)</label>
+                <input type="number" id="conductivity" placeholder="例如: 1500">
+            </div>
+
+            <button type="submit" class="submit-btn">🚀 開始診斷</button>
+            <div class="loading" id="loading">⏳ 診斷中...</div>
+        </form>
+    </div>
+
+    <script>
+        const liffId = 'YOUR_LIFF_ID'; // 待會替換
+        const webhook = 'https://eo9xer4x4f4gjfi.m.pipedream.net';
+
+        liff.init({ liffId }).then(() => {
+            if (!liff.isLoggedIn()) liff.login();
+        });
+
+        document.getElementById('coolantForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            document.getElementById('loading').style.display = 'block';
+            
+            const data = {
+                ph_value: parseFloat(document.getElementById('ph_value').value),
+                brix_reading: parseFloat(document.getElementById('brix_reading').value),
+                tank_size: parseInt(document.getElementById('tank_size').value),
+                oil_type: document.getElementById('oil_type').value,
+                bubble_result: document.getElementById('bubble_result').value,
+                resazurin_color: document.getElementById('resazurin_color').value,
+                symptoms: document.getElementById('symptoms').value || "無",
+                target_conc: parseFloat(document.getElementById('target_conc').value) || 5.0,
+                conductivity: parseInt(document.getElementById('conductivity').value) || 0,
+                user_id: liff.getContext().userId
+            };
+            
+            await fetch(webhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            liff.sendMessages([{
+                type: 'text',
+                text: '✅ 檢測資料已提交!\n\n🤖 AI 診斷中...'
+            }]).then(() => liff.closeWindow());
+        });
+    </script>
+</body>
+</html>
