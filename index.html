@@ -37,8 +37,16 @@
             margin-bottom: 30px;
             font-size: 14px;
         }
+        .section-title {
+            color: #667eea;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 30px 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
         .form-group {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         label {
             display: block;
@@ -50,19 +58,27 @@
         .required {
             color: #e74c3c;
         }
+        .optional {
+            color: #95a5a6;
+            font-size: 12px;
+            font-weight: 400;
+        }
         input, select, textarea {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
             border-radius: 10px;
             font-size: 16px;
+            transition: all 0.3s;
         }
         input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
         }
         textarea {
             min-height: 80px;
+            resize: vertical;
         }
         .submit-btn {
             width: 100%;
@@ -74,11 +90,21 @@
             font-size: 18px;
             font-weight: 600;
             cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+        }
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
         }
         .loading {
             text-align: center;
             color: #667eea;
             display: none;
+            margin-top: 15px;
         }
     </style>
 </head>
@@ -88,24 +114,33 @@
         <p class="subtitle">Dr. Coolant 智慧診斷系統</p>
         
         <form id="coolantForm">
+            <!-- 必填區域 -->
+            <div class="section-title">📋 基本數據(必填)</div>
+            
             <div class="form-group">
                 <label>🧪 pH 值<span class="required">*</span></label>
-                <input type="number" id="ph_value" step="0.1" required placeholder="例如: 8.5">
+                <input type="number" id="ph_value" step="0.1" min="0" max="14" required 
+                       placeholder="例如: 8.5">
             </div>
 
             <div class="form-group">
                 <label>🍬 Brix 糖度<span class="required">*</span></label>
-                <input type="number" id="brix_reading" step="0.1" required placeholder="例如: 5.2">
+                <input type="number" id="brix_reading" step="0.1" min="0" max="20" required 
+                       placeholder="例如: 5.2">
             </div>
 
             <div class="form-group">
-                <label>⚙️ 機台容量(公升)<span class="required">*</span></label>
-                <input type="number" id="tank_size" required placeholder="例如: 500">
+                <label>⚙️ 機台容量 (公升)<span class="required">*</span></label>
+                <input type="number" id="tank_size" min="1" max="10000" required 
+                       placeholder="例如: 500">
             </div>
 
+            <!-- 選填區域 -->
+            <div class="section-title">🔬 進階檢測 <span class="optional">(選填)</span></div>
+
             <div class="form-group">
-                <label>🛢️ 油品類型<span class="required">*</span></label>
-                <select id="oil_type" required>
+                <label>🛢️ 油品類型 <span class="optional">(選填)</span></label>
+                <select id="oil_type">
                     <option value="">請選擇</option>
                     <option value="全合成">全合成 (Fully Synthetic)</option>
                     <option value="半合成">半合成 (Semi-Synthetic)</option>
@@ -113,82 +148,122 @@
             </div>
 
             <div class="form-group">
-                <label>🧴 發泡劑測試<span class="required">*</span></label>
-                <select id="bubble_result" required>
+                <label>🧴 雙氧水氣泡測試 <span class="optional">(選填)</span></label>
+                <select id="bubble_result">
                     <option value="">請選擇</option>
-                    <option value="Level 1">Level 1 - 無氣泡 (安全)</option>
-                    <option value="Level 2">Level 2 - 少量氣泡 (輕微)</option>
-                    <option value="Level 3">Level 3 - 持續冒泡 (中度)</option>
-                    <option value="Level 4">Level 4 - 大量氣泡 (嚴重)</option>
+                    <option value="Level 1">Level 1 - 無氣泡/微量氣泡 (安全)</option>
+                    <option value="Level 2">Level 2 - 少量氣泡(汽水狀) (輕微感染)</option>
+                    <option value="Level 3">Level 3 - 持續冒泡(明顯反應) (中度感染)</option>
+                    <option value="Level 4">Level 4 - 大量氣泡(啤酒泡沫狀) (嚴重感染)</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label>🎨 刃天青測試<span class="required">*</span></label>
-                <select id="resazurin_color" required>
+                <label>🧪 Dr. Coolant 細菌顯影測試 <span class="optional">(選填)</span></label>
+                <select id="resazurin_color">
                     <option value="">請選擇</option>
-                    <option value="藍色">🔵 藍色 (安全)</option>
-                    <option value="紫色">🟣 紫色 (輕微)</option>
-                    <option value="粉紅色">🌸 粉紅色 (中度)</option>
-                    <option value="無色透明">⚪ 無色透明 (嚴重)</option>
+                    <option value="藍色">🔵 藍色 (Level 1 - 安全)</option>
+                    <option value="紫色">🟣 紫色 (Level 2 - 輕微感染)</option>
+                    <option value="粉紅色">🌸 粉紅色 (Level 3 - 中度感染)</option>
+                    <option value="無色透明">⚪ 無色透明 (Level 4 - 嚴重感染)</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label>📝 其他症狀</label>
-                <textarea id="symptoms" placeholder="例如: 輕微異味、表面浮油..."></textarea>
+                <label>📝 其他症狀 <span class="optional">(選填)</span></label>
+                <textarea id="symptoms" placeholder="例如: 輕微異味、表面浮油、顏色變深..."></textarea>
             </div>
 
             <div class="form-group">
-                <label>🎯 目標濃度(%)</label>
-                <input type="number" id="target_conc" step="0.1" placeholder="例如: 5.0">
+                <label>🎯 目標濃度 (%) <span class="optional">(選填)</span></label>
+                <input type="number" id="target_conc" step="0.1" min="0" max="20" 
+                       placeholder="例如: 5.0">
             </div>
 
             <div class="form-group">
-                <label>⚡ 導電度(μS/cm)</label>
-                <input type="number" id="conductivity" placeholder="例如: 1500">
+                <label>⚡ 導電度 (μS/cm) <span class="optional">(選填)</span></label>
+                <input type="number" id="conductivity" min="0" 
+                       placeholder="例如: 1500">
             </div>
 
-            <button type="submit" class="submit-btn">🚀 開始診斷</button>
-            <div class="loading" id="loading">⏳ 診斷中...</div>
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 開始診斷
+            </button>
+            <div class="loading" id="loading">
+                ⏳ 診斷中,請稍候...
+            </div>
         </form>
     </div>
 
     <script>
-        const liffId = '2008738088-3ae3t9Qw'; // 待會替換
+        const liffId = '2008738088-3ae3t9Qw';
         const webhook = 'https://eo9xer4x4f4gjfi.m.pipedream.net';
 
         liff.init({ liffId }).then(() => {
             if (!liff.isLoggedIn()) liff.login();
+        }).catch(err => {
+            console.error('LIFF init failed', err);
+            alert('LINE 登入失敗,請重試');
         });
 
         document.getElementById('coolantForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            document.getElementById('loading').style.display = 'block';
             
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            
+            // 收集必填資料
             const data = {
                 ph_value: parseFloat(document.getElementById('ph_value').value),
                 brix_reading: parseFloat(document.getElementById('brix_reading').value),
                 tank_size: parseInt(document.getElementById('tank_size').value),
-                oil_type: document.getElementById('oil_type').value,
-                bubble_result: document.getElementById('bubble_result').value,
-                resazurin_color: document.getElementById('resazurin_color').value,
-                symptoms: document.getElementById('symptoms').value || "無",
-                target_conc: parseFloat(document.getElementById('target_conc').value) || 5.0,
-                conductivity: parseInt(document.getElementById('conductivity').value) || 0,
-                user_id: liff.getContext().userId
+                user_id: liff.getContext().userId,
+                timestamp: new Date().toISOString()
             };
             
-            await fetch(webhook, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+            // 只有填寫時才加入選填欄位
+            const oilType = document.getElementById('oil_type').value;
+            if (oilType) data.oil_type = oilType;
             
-            liff.sendMessages([{
-                type: 'text',
-                text: '✅ 檢測資料已提交!\n\n🤖 AI 診斷中...'
-            }]).then(() => liff.closeWindow());
+            const bubbleResult = document.getElementById('bubble_result').value;
+            if (bubbleResult) data.bubble_result = bubbleResult;
+            
+            const resazurinColor = document.getElementById('resazurin_color').value;
+            if (resazurinColor) data.resazurin_color = resazurinColor;
+            
+            const symptoms = document.getElementById('symptoms').value.trim();
+            if (symptoms) data.symptoms = symptoms;
+            
+            const targetConc = document.getElementById('target_conc').value;
+            if (targetConc) data.target_conc = parseFloat(targetConc);
+            
+            const conductivity = document.getElementById('conductivity').value;
+            if (conductivity) data.conductivity = parseInt(conductivity);
+            
+            try {
+                const response = await fetch(webhook, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    await liff.sendMessages([{
+                        type: 'text',
+                        text: '✅ 檢測資料已提交!\n\n🤖 AI 正在分析中,請稍候...'
+                    }]);
+                    liff.closeWindow();
+                } else {
+                    throw new Error('提交失敗');
+                }
+            } catch (error) {
+                alert('提交失敗,請重試: ' + error.message);
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
         });
     </script>
 </body>
