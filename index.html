@@ -3,68 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>切削液診斷系統</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <title>Dr. Coolant 切削液健康檢測</title>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 20px;
             min-height: 100vh;
         }
+
         .container {
-            max-width: 500px;
+            max-width: 600px;
             margin: 0 auto;
             background: white;
             border-radius: 20px;
-            padding: 30px;
             box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
         }
-        h1 {
-            color: #667eea;
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
             text-align: center;
-            margin-bottom: 10px;
+        }
+
+        .header h1 {
             font-size: 24px;
+            margin-bottom: 10px;
         }
-        .subtitle {
-            text-align: center;
-            color: #666;
+
+        .header p {
             font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .form-container {
+            padding: 30px 20px;
+        }
+
+        .form-section {
             margin-bottom: 30px;
         }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .required-badge {
+            background: #ff4757;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 8px;
+        }
+
+        .optional-badge {
+            background: #a4b0be;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 8px;
+        }
+
         .form-group {
             margin-bottom: 20px;
         }
+
         label {
             display: block;
-            color: #333;
-            font-weight: 600;
-            margin-bottom: 8px;
             font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
         }
-        .required::after {
-            content: " *";
-            color: #e74c3c;
-        }
+
         input, select, textarea {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
+            padding: 12px 15px;
+            border: 2px solid #e1e8ed;
             border-radius: 10px;
             font-size: 16px;
-            transition: all 0.3s;
+            transition: border-color 0.3s;
         }
+
         input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
+
         textarea {
-            min-height: 80px;
             resize: vertical;
+            min-height: 80px;
         }
-        .btn {
+
+        .input-hint {
+            font-size: 12px;
+            color: #657786;
+            margin-top: 5px;
+        }
+
+        .submit-btn {
             width: 100%;
             padding: 15px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -72,199 +125,248 @@
             border: none;
             border-radius: 10px;
             font-size: 18px;
-            font-weight: 600;
+            font-weight: bold;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        .btn:active {
-            transform: scale(0.98);
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
         }
-        .btn:disabled {
-            opacity: 0.6;
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            background: #a4b0be;
             cursor: not-allowed;
+            transform: none;
         }
-        .section-title {
-            color: #764ba2;
-            font-size: 16px;
-            margin: 25px 0 15px 0;
-            padding-left: 10px;
-            border-left: 4px solid #667eea;
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #657786;
         }
-        .hint {
-            color: #999;
-            font-size: 12px;
-            margin-top: 5px;
+
+        .error {
+            background: #ff4757;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🧪 切削液健康診斷</h1>
-        <p class="subtitle">Dr. Coolant 專業分析系統</p>
-        
-        <form id="diagnosisForm">
-            <!-- 基本檢測數據 (必填) -->
-            <div class="section-title">📊 基本檢測數據</div>
-            
-            <div class="form-group">
-                <label class="required">pH 值</label>
-                <input type="number" step="0.1" id="ph_value" required 
-                       placeholder="例: 8.5" min="0" max="14">
-                <div class="hint">正常範圍: 8.5 - 9.5</div>
+        <div class="header">
+            <h1>🩺 Dr. Coolant</h1>
+            <p>切削液健康檢測表單</p>
+        </div>
+
+        <div class="form-container">
+            <div id="loading" class="loading" style="display: none;">
+                正在初始化 LIFF...
             </div>
 
-            <div class="form-group">
-                <label class="required">Brix 糖度讀數 (%)</label>
-                <input type="number" step="0.1" id="brix_reading" required 
-                       placeholder="例: 5.2" min="0" max="30">
-                <div class="hint">一般切削液: 3% - 8%</div>
-            </div>
+            <div id="error" class="error" style="display: none;"></div>
 
-            <div class="form-group">
-                <label class="required">機台容量 (L)</label>
-                <input type="number" id="tank_size" required 
-                       placeholder="例: 500" min="1">
-                <div class="hint">請填寫機台冷卻液槽總容量</div>
-            </div>
+            <form id="coolantForm" style="display: none;">
+                <!-- 必填欄位區 -->
+                <div class="form-section">
+                    <div class="section-title">
+                        📋 基本資料
+                        <span class="required-badge">必填</span>
+                    </div>
 
-            <!-- 進階檢測項目 (選填) -->
-            <div class="section-title">🔬 進階檢測項目 (選填)</div>
+                    <div class="form-group">
+                        <label for="oil_type">切削液種類 *</label>
+                        <select id="oil_type" name="oil_type" required>
+                            <option value="">請選擇</option>
+                            <option value="選項 1：全合成">選項 1：全合成</option>
+                            <option value="選項 2：半合成">選項 2：半合成</option>
+                        </select>
+                    </div>
 
-            <div class="form-group">
-                <label>油品類型</label>
-                <select id="oil_type">
-                    <option value="">-- 請選擇 --</option>
-                    <option value="全合成 (Fully Synthetic)">全合成 (Fully Synthetic)</option>
-                    <option value="半合成 (Semi-Synthetic)">半合成 (Semi-Synthetic)</option>
-                </select>
-            </div>
+                    <div class="form-group">
+                        <label for="ph_value">pH 值 *</label>
+                        <input type="number" id="ph_value" name="ph_value" 
+                               step="0.1" min="0" max="14" 
+                               placeholder="例：9.0" required>
+                        <div class="input-hint">標準範圍：8.5 ~ 9.5</div>
+                    </div>
 
-            <div class="form-group">
-                <label>雙氧水氣泡測試</label>
-                <select id="bubble_result">
-                    <option value="">-- 未測試 --</option>
-                    <option value="無氣泡/微量氣泡（Level 1 - 安全）">🟢 無氣泡/微量氣泡 (安全)</option>
-                    <option value="少量氣泡（汽水狀）（Level 2 - 輕微感染）">🟡 少量氣泡 (輕微感染)</option>
-                    <option value="持續冒泡（明顯反應）（Level 3 - 中度感染）">🟠 持續冒泡 (中度感染)</option>
-                    <option value="大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）">🔴 大量氣泡 (嚴重感染)</option>
-                </select>
-            </div>
+                    <div class="form-group">
+                        <label for="brix_reading">Brix 讀數 (%) *</label>
+                        <input type="number" id="brix_reading" name="brix_reading" 
+                               step="0.1" min="0" max="100" 
+                               placeholder="例：3.5" required>
+                        <div class="input-hint">折光儀測量值</div>
+                    </div>
 
-            <div class="form-group">
-                <label>Dr. Coolant 細菌顯影測試</label>
-                <select id="resazurin_color">
-                    <option value="">-- 未測試 --</option>
-                    <option value="🔵 藍色（Level 1 - 安全）">🔵 藍色 (安全)</option>
-                    <option value="🟣 紫色（Level 2 - 輕微感染）">🟣 紫色 (輕微感染)</option>
-                    <option value="🌸 粉紅色（Level 3 - 中度感染）">🌸 粉紅色 (中度感染)</option>
-                    <option value="⚪ 無色透明（Level 4 - 嚴重感染）">⚪ 無色透明 (嚴重感染)</option>
-                </select>
-            </div>
+                    <div class="form-group">
+                        <label for="tank_size">槽體容量 (公升) *</label>
+                        <input type="number" id="tank_size" name="tank_size" 
+                               step="1" min="1" 
+                               placeholder="例：500" required>
+                    </div>
+                </div>
 
-            <div class="form-group">
-                <label>目標濃度 (%)</label>
-                <input type="number" step="0.1" id="target_conc" 
-                       placeholder="例: 5.0" min="0" max="30">
-                <div class="hint">廠商建議的使用濃度</div>
-            </div>
+                <!-- 細菌檢測區（選填）-->
+                <div class="form-section">
+                    <div class="section-title">
+                        🦠 細菌檢測
+                        <span class="optional-badge">選填</span>
+                    </div>
 
-            <div class="form-group">
-                <label>導電度 (mS/cm)</label>
-                <input type="number" step="0.1" id="conductivity" 
-                       placeholder="例: 12.5" min="0">
-                <div class="hint">若有測試可填寫</div>
-            </div>
+                    <div class="form-group">
+                        <label for="bubble_result">雙氧水氣泡測試</label>
+                        <select id="bubble_result" name="bubble_result">
+                            <option value="請選擇(此選項代表不測試)">請選擇(此選項代表不測試)</option>
+                            <option value="Level 1(無反應)">Level 1(無反應)</option>
+                            <option value="Level 2(微量氣泡)">Level 2(微量氣泡)</option>
+                            <option value="Level 3(中量氣泡)">Level 3(中量氣泡)</option>
+                            <option value="Level 4(大量氣泡)">Level 4(大量氣泡)</option>
+                        </select>
+                    </div>
 
-            <div class="form-group">
-                <label>其他症狀描述</label>
-                <textarea id="symptoms" 
-                          placeholder="例: 有異味、顏色變深、表面浮油等"></textarea>
-            </div>
+                    <div class="form-group">
+                        <label for="resazurin_color">Dr. Coolant 細菌顯影測試</label>
+                        <select id="resazurin_color" name="resazurin_color">
+                            <option value="請選擇(此選項代表不測試)">請選擇(此選項代表不測試)</option>
+                            <option value="藍色">藍色（正常）</option>
+                            <option value="紫色">紫色（輕度）</option>
+                            <option value="粉紅色">粉紅色（中度）</option>
+                            <option value="紅色">紅色（嚴重）</option>
+                        </select>
+                    </div>
+                </div>
 
-            <button type="submit" class="btn" id="submitBtn">
-                🔍 開始 AI 診斷
-            </button>
-        </form>
+                <!-- 其他檢測區（選填）-->
+                <div class="form-section">
+                    <div class="section-title">
+                        📊 其他檢測數據
+                        <span class="optional-badge">選填</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="conductivity">電導度 (μS/cm)</label>
+                        <input type="number" id="conductivity" name="conductivity" 
+                               step="1" min="0" 
+                               placeholder="例：1500（未測試請留空）">
+                        <div class="input-hint">標準範圍：< 2000</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target_conc">目標濃度 (%)</label>
+                        <input type="number" id="target_conc" name="target_conc" 
+                               step="0.1" min="0" max="100" 
+                               placeholder="例：5.0（未指定請留空）">
+                        <div class="input-hint">若不填寫，系統將使用標準值</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="symptoms">觀察到的症狀</label>
+                        <textarea id="symptoms" name="symptoms" 
+                                  placeholder="例：液體有異味、表面有浮油、顏色變深...（選填）"></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    🚀 提交診斷
+                </button>
+            </form>
+        </div>
     </div>
 
     <script>
-        const liffId = '2008738088-3ae3t9Qw';
-        const webhook = 'https://eo9xer4x4f4gjfi.m.pipedream.net';
+        // ===== 🔗 設定區：請替換為您的實際 URL =====
+        const WEBHOOK_URL = 'https://eoxxxxxxxxxx.m.pipedream.net';  // ← 替換為您的 Pipedream Webhook URL
 
-        // 初始化 LIFF
-        liff.init({ liffId })
-            .then(() => {
+        // ===== LIFF 初始化 =====
+        window.onload = function() {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            const form = document.getElementById('coolantForm');
+
+            loadingDiv.style.display = 'block';
+
+            liff.init({
+                liffId: '請替換為您的LIFF_ID'  // ← 替換為您的 LIFF ID
+            }).then(() => {
                 if (!liff.isLoggedIn()) {
                     liff.login();
+                } else {
+                    loadingDiv.style.display = 'none';
+                    form.style.display = 'block';
                 }
-            })
-            .catch(err => {
-                alert('LIFF 初始化失敗: ' + err);
+            }).catch((err) => {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'LIFF 初始化失敗：' + err;
             });
+        };
 
-        // 表單提交
-        document.getElementById('diagnosisForm').addEventListener('submit', async (e) => {
+        // ===== 表單提交處理 =====
+        document.getElementById('coolantForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.textContent = '⏳ 診斷中...';
 
-            // 取得 LINE 用戶資料
-            let userId = 'unknown';
             try {
+                // 取得 LINE 使用者 ID
                 const profile = await liff.getProfile();
-                userId = profile.userId;
-            } catch (err) {
-                console.error('無法取得用戶資料:', err);
-            }
 
-            // 收集表單數據 (只傳有值的選填欄位)
-            const formData = {
-                type: 'liff_form',
-                user_id: userId,
-                ph_value: parseFloat(document.getElementById('ph_value').value),
-                brix_reading: parseFloat(document.getElementById('brix_reading').value),
-                tank_size: parseInt(document.getElementById('tank_size').value)
-            };
+                // 整理表單資料
+                const formData = {
+                    userId: profile.userId,
+                    displayName: profile.displayName,
+                    
+                    // 必填欄位
+                    oil_type: document.getElementById('oil_type').value,
+                    ph_value: parseFloat(document.getElementById('ph_value').value),
+                    brix_reading: parseFloat(document.getElementById('brix_reading').value),
+                    tank_size: parseFloat(document.getElementById('tank_size').value),
+                    
+                    // 選填欄位
+                    bubble_result: document.getElementById('bubble_result').value,
+                    resazurin_color: document.getElementById('resazurin_color').value,
+                    conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
+                    target_conc: parseFloat(document.getElementById('target_conc').value) || 0,
+                    symptoms: document.getElementById('symptoms').value || ''
+                };
 
-            // 選填欄位 - 只在有值時加入
-            const oil_type = document.getElementById('oil_type').value;
-            if (oil_type) formData.oil_type = oil_type;
+                // 驗證必填欄位
+                if (!formData.oil_type || !formData.ph_value || !formData.brix_reading || !formData.tank_size) {
+                    throw new Error('請填寫所有必填欄位');
+                }
 
-            const bubble = document.getElementById('bubble_result').value;
-            if (bubble) formData.bubble_result = bubble;
-
-            const resazurin = document.getElementById('resazurin_color').value;
-            if (resazurin) formData.resazurin_color = resazurin;
-
-            const target = document.getElementById('target_conc').value;
-            if (target) formData.target_conc = parseFloat(target);
-
-            const cond = document.getElementById('conductivity').value;
-            if (cond) formData.conductivity = parseFloat(cond);
-
-            const symp = document.getElementById('symptoms').value.trim();
-            if (symp) formData.symptoms = symp;
-
-            // 發送到 Pipedream
-            try {
-                const response = await fetch(webhook, {
+                // 發送到 Pipedream
+                const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(formData)
                 });
 
                 if (response.ok) {
-                    alert('✅ 診斷請求已送出!\n\n請返回 LINE 查看完整診斷報告');
+                    alert('✅ 診斷報告已送出！\n\n請稍後於 LINE 查看診斷結果（約 10-30 秒）');
                     liff.closeWindow();
                 } else {
-                    throw new Error(`HTTP ${response.status}`);
+                    throw new Error('伺服器回應錯誤：' + response.status);
                 }
-            } catch (err) {
-                alert('❌ 送出失敗: ' + err.message);
+
+            } catch (error) {
+                alert('❌ 送出失敗：' + error.message + '\n\n請檢查網路連線後重試');
                 submitBtn.disabled = false;
-                submitBtn.textContent = '🔍 開始 AI 診斷';
+                submitBtn.textContent = '🚀 提交診斷';
             }
         });
     </script>
