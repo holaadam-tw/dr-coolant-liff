@@ -108,6 +108,14 @@
             width: 3rem;
             height: 3rem;
         }
+        
+        /* 鎖定欄位的樣式 */
+        .locked-input {
+            background-color: #e9ecef !important;
+            cursor: not-allowed;
+            color: #495057;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -255,8 +263,62 @@
         const LIFF_ID = '2008738088-3ae3t9Qw';
         const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
 
+        // ===== 啟動函式：處理網址參數自動填入 (最重要的部分) =====
+        function autoFillFromUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // 1. 取得參數
+            const machineId = urlParams.get('machine_id'); // 網址參數: machine_id
+            const tankSize  = urlParams.get('tank');       // 網址參數: tank (對應E欄)
+            const targetConc = urlParams.get('target');    // 網址參數: target (對應F欄)
+            const oilCode   = urlParams.get('oil');        // 網址參數: oil (對應G欄: 1 或 2)
+
+            // 2. 執行自動填寫 logic
+            
+            // (A) 機台編號
+            if (machineId) {
+                const input = document.getElementById('machine-id');
+                if (input) {
+                    input.value = machineId;
+                    input.classList.add('locked-input'); // 加上灰色樣式
+                    input.readOnly = true;             // 設定為唯讀
+                }
+            }
+
+            // (B) 切削液種類 (代碼翻譯)
+            if (oilCode) {
+                const input = document.getElementById('oil-type');
+                if (input) {
+                    if (oilCode === '1') {
+                        input.value = "選項 1：全合成 (Fully Synthetic)";
+                    } else if (oilCode === '2') {
+                        input.value = "選項 2：半合成 (Semi-Synthetic)";
+                    }
+                    // 如果需要鎖定不讓改，可以把下面這行註解拿掉
+                    // input.classList.add('locked-input'); 
+                    // input.style.pointerEvents = 'none'; // 讓選單無法點擊
+                }
+            }
+
+            // (C) 槽體容量
+            if (tankSize) {
+                const input = document.getElementById('tank-size');
+                if (input) input.value = tankSize;
+            }
+
+            // (D) 目標濃度
+            if (targetConc) {
+                const input = document.getElementById('target-conc');
+                if (input) input.value = targetConc;
+            }
+        }
+
         // ===== LIFF 初始化 =====
         document.addEventListener('DOMContentLoaded', function() {
+            // 1. 先執行自動填寫 (這樣就算沒登入，也能看到資料填好了)
+            autoFillFromUrl();
+
+            // 2. 初始化 LIFF
             liff.init({
                 liffId: LIFF_ID
             }).then(() => {
@@ -290,7 +352,7 @@
                 const formData = {
                     userId: profile.userId,
                     displayName: profile.displayName,
-                    // ✅ 新增：取得機台編號
+                    // 取得機台編號
                     machine_id: document.getElementById('machine-id').value.trim(),
                     
                     oil_type: document.getElementById('oil-type').value,
