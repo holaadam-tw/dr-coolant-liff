@@ -315,7 +315,7 @@
             const params = {
                 machine_id: machineId,
                 name:       urlParams.get('name'),    
-                vendor:     urlParams.get('vendor'),  
+                vendor:     urlParams.get('vendor'),   
                 tank:       urlParams.get('tank'),
                 target:     urlParams.get('target'),
                 oil:        urlParams.get('oil')
@@ -324,8 +324,8 @@
             // 2. 對應 ID 與 參數 (這是舊邏輯，主要用於填入名稱、容量等靜態資料)
             const mapping = {
                 'machine-id':   params.machine_id,
-                'machine-name': params.name,       
-                'vendor-code':  params.vendor,     
+                'machine-name': params.name,        
+                'vendor-code':  params.vendor,      
                 'tank-size':    params.tank,
                 'target-conc':  params.target // 這是舊的，如果 API 讀取成功會被覆蓋
             };
@@ -337,7 +337,7 @@
                     if (el) {
                         el.value = value;
                         // 機台資訊相關欄位設為唯讀
-                        if(id === 'machine-id' || id === 'machine-name' || id === 'vendor-code') {
+                        if(id === 'machine-id' || id === 'machine-name' || id === 'vendor-code' || id === 'tank-size') {
                             el.classList.add('locked-input');
                             el.readOnly = true;
                         }
@@ -346,7 +346,7 @@
                 }
             }
 
-            // 4. ★ 新增：呼叫 Pipedream API 獲取最新的目標濃度和油品 ★
+            // 4. ★ 新增：呼叫 Pipedream API 獲取最新的目標濃度、油品和容積 ★
             if (machineId) {
                 console.log(`正在查詢機台 ${machineId} 的最新設定...`);
                 
@@ -361,18 +361,27 @@
                             targetEl.value = data.target_conc;
                             checkInputColor(targetEl);
                         }
+
+                        // (B) ★ 新增：更新槽體容積 ★
+                        if (data.tank_capacity && document.getElementById('tank-size')) {
+                            const tankEl = document.getElementById('tank-size');
+                            tankEl.value = data.tank_capacity;
+                            
+                            // 因為 tank-size 也是 input，所以可以解鎖讓用戶修改
+                            tankEl.classList.remove('locked-input');
+                            tankEl.readOnly = false; // 允許用戶修改
+                            
+                            checkInputColor(tankEl);
+                        }
                         
-                        // (B) 更新油品類型
+                        // (C) 更新油品類型
                         if (data.oil_type && document.getElementById('oil-type')) {
                             const oilEl = document.getElementById('oil-type');
-                            // 簡單判斷並選取對應選項
                             if (data.oil_type.includes("全合成")) {
                                 oilEl.value = "選項 1：全合成 (Fully Synthetic)";
                             } else if (data.oil_type.includes("半合成")) {
                                 oilEl.value = "選項 2：半合成 (Semi-Synthetic)";
                             }
-                            
-                            // 更新選單後，觸發變色和提示更新
                             checkInputColor(oilEl);
                             updateRangeHints(); 
                         }
