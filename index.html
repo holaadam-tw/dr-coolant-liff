@@ -321,13 +321,13 @@
                 oil:        urlParams.get('oil')
             };
 
-            // 2. 對應 ID 與 參數 (這是舊邏輯，主要用於填入名稱、容量等靜態資料)
+            // 2. 對應 ID 與 參數 (設定預設值)
             const mapping = {
                 'machine-id':   params.machine_id,
                 'machine-name': params.name,        
                 'vendor-code':  params.vendor,      
                 'tank-size':    params.tank,
-                'target-conc':  params.target // 這是舊的，如果 API 讀取成功會被覆蓋
+                'target-conc':  params.target 
             };
 
             // 3. 自動填寫靜態資料
@@ -336,17 +336,19 @@
                     const el = document.getElementById(id);
                     if (el) {
                         el.value = value;
-                        // 機台資訊相關欄位設為唯讀
-                        if(id === 'machine-id' || id === 'machine-name' || id === 'vendor-code' || id === 'tank-size') {
+                        
+                        // ★ 修正重點：只鎖定 ID、名稱和廠商，不要鎖定 tank-size ★
+                        if(id === 'machine-id' || id === 'machine-name' || id === 'vendor-code') {
                             el.classList.add('locked-input');
                             el.readOnly = true;
                         }
+                        
                         checkInputColor(el);
                     }
                 }
             }
 
-            // 4. ★ 新增：呼叫 Pipedream API 獲取最新的目標濃度、油品和容積 ★
+            // 4. 呼叫 Pipedream API 獲取最新的目標濃度、油品和容積
             if (machineId) {
                 console.log(`正在查詢機台 ${machineId} 的最新設定...`);
                 
@@ -362,14 +364,14 @@
                             checkInputColor(targetEl);
                         }
 
-                        // (B) ★ 新增：更新槽體容積 ★
+                        // (B) 更新槽體容積 (API 有資料就更新，但保持可編輯)
                         if (data.tank_capacity && document.getElementById('tank-size')) {
                             const tankEl = document.getElementById('tank-size');
                             tankEl.value = data.tank_capacity;
                             
-                            // 因為 tank-size 也是 input，所以可以解鎖讓用戶修改
+                            // 確保是解鎖狀態
                             tankEl.classList.remove('locked-input');
-                            tankEl.readOnly = false; // 允許用戶修改
+                            tankEl.readOnly = false; 
                             
                             checkInputColor(tankEl);
                         }
@@ -400,7 +402,7 @@
                 }
             }
 
-            // 5. 綁定監聽器：當使用者手動打字或選取時，也要變色
+            // 5. 綁定監聽器
             const allInputs = document.querySelectorAll('.form-control, .form-select');
             allInputs.forEach(input => {
                 input.addEventListener('input', () => checkInputColor(input));
