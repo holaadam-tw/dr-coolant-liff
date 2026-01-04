@@ -95,6 +95,7 @@
             font-size: 0.85rem;
             color: #6c757d;
             margin-top: 5px;
+            font-style: italic;
         }
         
         .section-divider {
@@ -161,7 +162,7 @@
                         <label for="oil-type" class="form-label">
                             切削液種類 <span class="required-mark">*</span>
                         </label>
-                        <select id="oil-type" class="form-select" required>
+                        <select id="oil-type" class="form-select" required onchange="updateRangeHints()">
                             <option value="">請選擇切削液種類</option>
                             <option value="選項 1：全合成 (Fully Synthetic)">選項 1：全合成 (Fully Synthetic)</option>
                             <option value="選項 2：半合成 (Semi-Synthetic)">選項 2：半合成 (Semi-Synthetic)</option>
@@ -174,7 +175,7 @@
                         </label>
                         <input type="number" id="ph-value" class="form-control" 
                                step="0.1" min="0" max="14" placeholder="例如：9.2" required>
-                        <div class="info-text">正常範圍：8.5 - 9.5</div>
+                        <div id="ph-hint" class="info-text">正常範圍：8.5 - 9.5</div>
                     </div>
 
                     <div class="mb-3">
@@ -183,7 +184,7 @@
                         </label>
                         <input type="number" id="brix-reading" class="form-control" 
                                step="0.1" min="0" placeholder="例如：3.5" required>
-                        <div class="info-text">正常範圍：3.0 - 5.0%</div>
+                        <div id="conc-hint" class="info-text">正常範圍：3.0 - 5.0%</div>
                     </div>
 
                     <div class="mb-3">
@@ -268,6 +269,9 @@
         // ===== 配置區 =====
         const LIFF_ID = '2008738088-3ae3t9Qw';
         const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
+        
+        // ★ 請在這裡填入您剛建立的「讀取專用」Pipedream API 網址 ★
+        const READ_API_URL = 'https://eo7faps5jsk36xh.m.pipedream.net'; 
 
         // ===== 核心功能：檢查欄位是否填寫，變更顏色 =====
         function checkInputColor(inputElement) {
@@ -280,30 +284,53 @@
             }
         }
 
+        // ===== 新增功能：根據油品類型動態更新提示文字 =====
+        function updateRangeHints() {
+            const oilType = document.getElementById('oil-type').value;
+            const phHint = document.getElementById('ph-hint');
+            const concHint = document.getElementById('conc-hint');
+
+            if (oilType.includes("全合成")) {
+                phHint.innerText = "正常範圍：8.5 - 9.5";
+                concHint.innerText = "正常範圍：4.0 - 6.0%";
+            } else if (oilType.includes("半合成")) {
+                phHint.innerText = "正常範圍：8.8 - 9.5";
+                concHint.innerText = "正常範圍：6.0 - 8.0%";
+            } else {
+                // 預設值 (尚未選擇時)
+                phHint.innerText = "正常範圍：8.5 - 9.5";
+                concHint.innerText = "正常範圍：3.0 - 5.0%";
+            }
+            
+            // 記得檢查選單顏色
+            checkInputColor(document.getElementById('oil-type'));
+        }
+
         // ===== 啟動函式：監聽所有欄位輸入 & 自動填入 =====
         function initFormLogic() {
             const urlParams = new URLSearchParams(window.location.search);
             
-            // 1. 取得網址參數
+            // 1. 取得網址參數 (來自 QR Code)
+            const machineId = urlParams.get('machine_id');
             const params = {
-                machine_id: urlParams.get('machine_id'),
-                name:       urlParams.get('name'),    // 新增：機台名稱
-                vendor:     urlParams.get('vendor'),  // 新增：廠商代碼
+                machine_id: machineId,
+                name:       urlParams.get('name'),    
+                vendor:     urlParams.get('vendor'),  
                 tank:       urlParams.get('tank'),
                 target:     urlParams.get('target'),
                 oil:        urlParams.get('oil')
             };
 
-            // 2. 對應 ID 與 參數
+            // 2. 對應 ID 與 參數 (這是舊邏輯，主要用於填入名稱、容量等靜態資料)
             const mapping = {
                 'machine-id':   params.machine_id,
-                'machine-name': params.name,       // 對應 HTML ID
-                'vendor-code':  params.vendor,     // 對應 HTML ID
+                'machine-name': params.name,       
+                'vendor-code':  params.vendor,     
                 'tank-size':    params.tank,
-                'target-conc':  params.target
+                'target-conc':  params.target // 這是舊的，如果 API 讀取成功會被覆蓋
             };
 
-            // 3. 自動填寫邏輯 (文字框)
+            // 3. 自動填寫靜態資料
             for (const [id, value] of Object.entries(mapping)) {
                 if (value) {
                     const el = document.getElementById(id);
@@ -314,25 +341,59 @@
                             el.classList.add('locked-input');
                             el.readOnly = true;
                         }
-                        checkInputColor(el); // ★ 填入後立刻變色
+                        checkInputColor(el);
                     }
                 }
             }
 
-            // 4. 自動填寫邏輯 (下拉選單 - 切削液)
-            if (params.oil) {
-                const oilEl = document.getElementById('oil-type');
-                if (oilEl) {
-                    if (params.oil === '1') oilEl.value = "選項 1：全合成 (Fully Synthetic)";
-                    else if (params.oil === '2') oilEl.value = "選項 2：半合成 (Semi-Synthetic)";
-                    checkInputColor(oilEl); // ★ 填入後立刻變色
+            // 4. ★ 新增：呼叫 Pipedream API 獲取最新的目標濃度和油品 ★
+            if (machineId) {
+                console.log(`正在查詢機台 ${machineId} 的最新設定...`);
+                
+                fetch(`${READ_API_URL}?machine_id=${machineId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log("API 回傳資料:", data);
+                        
+                        // (A) 更新目標濃度
+                        if (data.target_conc && document.getElementById('target-conc')) {
+                            const targetEl = document.getElementById('target-conc');
+                            targetEl.value = data.target_conc;
+                            checkInputColor(targetEl);
+                        }
+                        
+                        // (B) 更新油品類型
+                        if (data.oil_type && document.getElementById('oil-type')) {
+                            const oilEl = document.getElementById('oil-type');
+                            // 簡單判斷並選取對應選項
+                            if (data.oil_type.includes("全合成")) {
+                                oilEl.value = "選項 1：全合成 (Fully Synthetic)";
+                            } else if (data.oil_type.includes("半合成")) {
+                                oilEl.value = "選項 2：半合成 (Semi-Synthetic)";
+                            }
+                            
+                            // 更新選單後，觸發變色和提示更新
+                            checkInputColor(oilEl);
+                            updateRangeHints(); 
+                        }
+                    })
+                    .catch(err => console.error("無法取得最新機台設定:", err));
+            } else {
+                // 如果沒有 API (備用)：使用網址上的 oil 參數
+                if (params.oil) {
+                    const oilEl = document.getElementById('oil-type');
+                    if (oilEl) {
+                        if (params.oil === '1') oilEl.value = "選項 1：全合成 (Fully Synthetic)";
+                        else if (params.oil === '2') oilEl.value = "選項 2：半合成 (Semi-Synthetic)";
+                        checkInputColor(oilEl);
+                        updateRangeHints();
+                    }
                 }
             }
 
             // 5. 綁定監聽器：當使用者手動打字或選取時，也要變色
             const allInputs = document.querySelectorAll('.form-control, .form-select');
             allInputs.forEach(input => {
-                // 監聽 input 事件 (打字時) 和 change 事件 (選單改變時)
                 input.addEventListener('input', () => checkInputColor(input));
                 input.addEventListener('change', () => checkInputColor(input));
             });
@@ -340,7 +401,7 @@
 
         // ===== LIFF 初始化 =====
         document.addEventListener('DOMContentLoaded', function() {
-            // 1. 執行表單邏輯 (填值 + 綁定變色)
+            // 1. 執行表單邏輯
             initFormLogic();
 
             // 2. 初始化 LIFF
@@ -373,7 +434,6 @@
                     displayName: profile.displayName,
                     machine_id: document.getElementById('machine-id').value.trim(),
                     
-                    // 這裡可以選擇是否傳送 machine_name 給後端，目前先保留
                     oil_type: document.getElementById('oil-type').value,
                     ph_value: parseFloat(document.getElementById('ph-value').value),
                     brix_reading: parseFloat(document.getElementById('brix-reading').value),
