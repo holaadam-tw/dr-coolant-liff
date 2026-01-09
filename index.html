@@ -313,27 +313,26 @@
             checkInputColor(document.getElementById('oil-type'));
         }
 
-        // ===== 從 Supabase 讀取機台資料 (修正版) =====
+        // ===== 從 Supabase 讀取機台資料 (修正版 v11.5) =====
         async function loadMachineData(machineId) {
             try {
                 console.log(`🔍 正在讀取機台 ${machineId}...`);
                 
-                // 🔥 直接查詢 machines 表格 (不使用 RPC，避免錯誤)
-                // 這裡使用 .from('machines').select('*') 是最穩定的寫法
+                // 🔥 修正：使用直接查詢取代 RPC
                 const { data, error } = await supabase
                     .from('machines')
                     .select('*')
                     .eq('machine_id', machineId)
-                    .single(); // 只抓一筆
+                    .single(); 
 
                 if (error) {
                     console.error('❌ Supabase 查詢錯誤:', error);
-                    // 這裡不顯示 alert 避免打擾使用者，改用 console log
+                    // 只有在真的連不上時才報錯，避免干擾使用者
                     return null;
                 }
                 
                 if (!data) {
-                    showAlert(`資料庫中沒有機台 ${machineId}`, 'warning');
+                    showAlert(`⚠️ 資料庫中找不到機台: ${machineId}`, 'warning');
                     return null;
                 }
 
@@ -351,7 +350,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             let machineId = urlParams.get('machine_id');
 
-            // 如果 URL 沒抓到，嘗試從 LIFF Context 抓 (雙重保險 - 解決部分 Android 手機問題)
+            // 2. LIFF Context 備援 (解決部分 Android/iOS 掉參數問題)
             if (!machineId && liff.getContext()) {
                 if (liff.getContext().endpointUrl && liff.getContext().endpointUrl.includes('?')) {
                     const query = liff.getContext().endpointUrl.split('?')[1];
@@ -365,47 +364,46 @@
                 return;
             }
             
-            // 2. 填入機台 ID
+            // 3. 填入機台 ID
             document.getElementById('machine-id').value = machineId;
             checkInputColor(document.getElementById('machine-id'));
             
-            // 3. 從資料庫讀取詳細資料
+            // 4. 從資料庫讀取詳細資料
             const machineData = await loadMachineData(machineId);
             
             if (machineData) {
-                // 填入名稱
+                // 自動填入：機台名稱
                 if (machineData.machine_name) {
                     const el = document.getElementById('machine-name');
                     el.value = machineData.machine_name;
                     checkInputColor(el);
                 }
                 
-                // 填入廠商
+                // 自動填入：廠商
                 if (machineData.vendor) {
                     const el = document.getElementById('vendor-code');
                     el.value = machineData.vendor;
                     checkInputColor(el);
                 }
                 
-                // 填入容量
+                // 自動填入：容量
                 if (machineData.capacity) {
                     const el = document.getElementById('tank-size');
                     el.value = machineData.capacity;
                     checkInputColor(el);
                 }
                 
-                // 填入目標濃度
+                // 自動填入：目標濃度
                 if (machineData.target_conc) {
                     const el = document.getElementById('target-conc');
                     el.value = machineData.target_conc;
                     checkInputColor(el);
                 }
                 
-                // 🔥 修正油品代碼 (Mapping Logic)
-                // 資料庫存的是 1 或 2，但 HTML 選單需要 "選項 1"
+                // 🔥 自動填入：油品類型 (修正數字轉文字的問題)
                 if (machineData.oil_code) {
                     const el = document.getElementById('oil-type');
-                    let code = String(machineData.oil_code); // 轉成字串比對
+                    let code = String(machineData.oil_code); // 強制轉成文字比對
                     
                     if (code === "1" || code === "選項 1") {
                         el.value = "選項 1";
@@ -417,7 +415,7 @@
                     updateRangeHints();
                 }
                 
-                // 顯示上次檢測值 (如果有)
+                // 顯示上次檢測值 (需資料庫有欄位)
                 if (machineData.last_brix) {
                     document.getElementById('brix-last-value').innerText = `💡 上次：${machineData.last_brix}%`;
                 }
