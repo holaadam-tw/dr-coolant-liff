@@ -414,13 +414,19 @@
                     console.log('✅ 目標濃度:', machineData.target_conc);
                 }
                 
-                // 填入油品類型
+                // 填入油品類型（轉換 oil_code 數字為選項文字）
                 if (machineData.oil_code) {
                     const oilEl = document.getElementById('oil-type');
-                    oilEl.value = machineData.oil_code; // "選項 1" 或 "選項 2"
+                    // 轉換："1" 或 "2" → "選項 1" 或 "選項 2"
+                    const oilValue = machineData.oil_code === "1" || machineData.oil_code === 1 
+                        ? "選項 1" 
+                        : machineData.oil_code === "2" || machineData.oil_code === 2 
+                        ? "選項 2" 
+                        : "";
+                    oilEl.value = oilValue;
                     checkInputColor(oilEl);
                     updateRangeHints();
-                    console.log('✅ 切削液種類:', machineData.oil_code);
+                    console.log('✅ 切削液種類:', oilValue, '(原始 oil_code:', machineData.oil_code, ')');
                 }
                 
                 // ✅ 顯示上次檢測值
