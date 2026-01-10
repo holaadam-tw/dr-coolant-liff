@@ -56,7 +56,7 @@
         <div class="card">
             <div class="card-header text-center">
                 <h1>🔬 Dr. Coolant</h1>
-                <p class="mb-0">切削液智能診斷系統 v12.5-DIFY-Compatible</p>
+                <p class="mb-0">切削液智能診斷系統 v12.6-EXACT-MATCH</p>
             </div>
             
             <div class="card-body">
@@ -123,18 +123,18 @@
                     <div class="mb-3">
                         <label class="form-label">💧 雙氧水氣泡測試</label>
                         <select id="bubble-result" class="form-select">
-                            <option value="">未檢測</option>
+                            <option value="請選擇">請選擇</option>
                             <option value="選項 1：無氣泡/微量氣泡（Level 1 - 安全）">選項 1：無氣泡/微量氣泡（Level 1 - 安全）</option>
-                            <option value="選項 2：少量氣泡（浮水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡（浮水狀）（Level 2 - 輕微感染）</option>
+                            <option value="選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）</option>
                             <option value="選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）">選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）</option>
-                            <option value="選項 4：大量氣泡（酒精泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡（酒精泡沫狀）（Level 4 - 嚴重感染）</option>
+                            <option value="選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）</option>
                         </select>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">🧪 Dr. Coolant 細菌顯影</label>
                         <select id="resazurin-color" class="form-select">
-                            <option value="">未檢測</option>
+                            <option value="請選擇">請選擇</option>
                             <option value="選項 1：🔵 藍色（Level 1 - 安全）">選項 1：🔵 藍色（Level 1 - 安全）</option>
                             <option value="選項 2：🟣 紫色（Level 2 - 輕微感染）">選項 2：🟣 紫色（Level 2 - 輕微感染）</option>
                             <option value="選項 3：🌸 粉紅色（Level 3 - 中度感染）">選項 3：🌸 粉紅色（Level 3 - 中度感染）</option>
@@ -435,9 +435,13 @@
                 const phValue = parseFloat(document.getElementById('ph-value').value) || 0;
                 const brixReading = parseFloat(document.getElementById('brix-reading').value) || 0;
                 
-                // 取得選項值（Dify 格式）
-                const bubbleResult = document.getElementById('bubble-result').value || '未檢測';
-                const resazurinColor = document.getElementById('resazurin-color').value || '未檢測';
+                // ✅ 取得選項值（完全匹配 Dify）
+                let bubbleResult = document.getElementById('bubble-result').value;
+                let resazurinColor = document.getElementById('resazurin-color').value;
+                
+                // 如果是「請選擇」則改為空字串（表示未檢測）
+                if (bubbleResult === '請選擇') bubbleResult = '';
+                if (resazurinColor === '請選擇') resazurinColor = '';
 
                 const formData = {
                     ref_id: document.getElementById('ref-id').value,
@@ -457,8 +461,8 @@
                     symptoms: document.getElementById('symptoms').value || ''
                 };
 
-                log(`📦 bubble_result: ${bubbleResult}`, 'info');
-                log(`📦 resazurin_color: ${resazurinColor}`, 'info');
+                log(`📦 bubble_result: "${bubbleResult}"`, 'info');
+                log(`📦 resazurin_color: "${resazurinColor}"`, 'info');
 
                 // 更新資料庫
                 if (sb) {
