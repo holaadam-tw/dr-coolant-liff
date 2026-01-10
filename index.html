@@ -32,7 +32,22 @@
         #loading { display: none; text-align: center; padding: 20px; }
         .spinner-border { width: 3rem; height: 3rem; }
         
-        /* Debug Log */
+        /* ✨ 簡化版載入狀態 - 只顯示成功訊息 */
+        .sync-status {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #c3e6cb;
+        }
+        
+        .sync-status.show { display: block; }
+        
+        /* Debug Log - 預設隱藏，可選擇性開啟 */
         #debug-log {
             background: #000;
             color: #0f0;
@@ -43,12 +58,29 @@
             max-height: 180px;
             overflow-y: auto;
             margin-bottom: 15px;
+            display: none;  /* ✨ 預設隱藏 */
         }
         #debug-log div { margin: 2px 0; }
         .log-error { color: #f00; }
         .log-success { color: #0f0; }
         .log-warn { color: #ff0; }
         .log-info { color: #0dd; }
+        
+        /* Debug 開關按鈕 */
+        .debug-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
@@ -56,10 +88,16 @@
         <div class="card">
             <div class="card-header text-center">
                 <h1>🔬 Dr. Coolant</h1>
-                <p class="mb-0">切削液智能診斷系統 v12.6-EXACT-MATCH</p>
+                <p class="mb-0">切削液智能診斷系統 v12.7</p>
             </div>
             
             <div class="card-body">
+                <!-- ✨ 簡化版狀態訊息 -->
+                <div id="sync-status" class="sync-status">
+                    ✅ 機台資料已同步
+                </div>
+                
+                <!-- Debug Log（預設隱藏） -->
                 <div id="debug-log"></div>
                 
                 <div id="alert-container"></div>
@@ -163,15 +201,25 @@
         </div>
     </div>
 
+    <!-- Debug 開關按鈕 -->
+    <button class="debug-toggle" id="debug-toggle" title="顯示/隱藏 Debug Log">🐛</button>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        const LIFF_ID = '2008738088-3ae3t9Qw';
-        const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
-        const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
+        const LIFF_ID = '[REDACTED]';
+        const WEBHOOK_URL = '[REDACTED]';
+        const SUPABASE_URL = '[REDACTED]';
+        const SUPABASE_ANON_KEY = '[REDACTED]';
 
         let sb = null;
+        let debugMode = false;  // ✨ Debug 模式開關
+
+        // ✨ Debug 開關
+        document.getElementById('debug-toggle').addEventListener('click', () => {
+            debugMode = !debugMode;
+            document.getElementById('debug-log').style.display = debugMode ? 'block' : 'none';
+        });
 
         function log(msg, type = 'info') {
             const div = document.getElementById('debug-log');
@@ -190,6 +238,15 @@
                     ${msg}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>`;
+        }
+        
+        // ✨ 顯示簡化版同步狀態
+        function showSyncStatus() {
+            const status = document.getElementById('sync-status');
+            status.classList.add('show');
+            setTimeout(() => {
+                status.classList.remove('show');
+            }, 3000);
         }
 
         function generateRefId() {
@@ -267,11 +324,6 @@
                 }
                 
                 log('✅ 查詢成功', 'success');
-                log(`  machine_name: ${data.machine_name}`, 'info');
-                log(`  vendor: ${data.vendor}`, 'info');
-                log(`  capacity: ${data.capacity}`, 'info');
-                log(`  target_conc: ${data.target_conc}`, 'info');
-                log(`  oil_code: ${data.oil_code}`, 'info');
                 
                 return data;
             } catch (e) {
@@ -289,8 +341,6 @@
                     el.value = val;
                     markFilled(el);
                     log(`  ✓ ${name}: ${val}`, 'success');
-                } else {
-                    log(`  - ${name}: 無資料`, 'warn');
                 }
             };
 
@@ -319,11 +369,9 @@
             // 上次檢測值
             if (data.last_ph) {
                 document.getElementById('ph-last-value').textContent = `💡 上次：pH ${data.last_ph}`;
-                log(`  💡 last_ph: ${data.last_ph}`, 'info');
             }
             if (data.last_brix) {
                 document.getElementById('brix-last-value').textContent = `💡 上次：${data.last_brix}%`;
-                log(`  💡 last_brix: ${data.last_brix}`, 'info');
             }
             
             log('✅ 表單填入完成', 'success');
@@ -376,7 +424,7 @@
             
             if (data) {
                 fillForm(data);
-                showAlert('✅ 機台資料已同步', 'success');
+                showSyncStatus();  // ✨ 顯示簡化版成功訊息
             } else {
                 log('❌ 無法載入機台資料', 'error');
                 showAlert('⚠️ 無法載入機台資料', 'warning');
@@ -435,11 +483,9 @@
                 const phValue = parseFloat(document.getElementById('ph-value').value) || 0;
                 const brixReading = parseFloat(document.getElementById('brix-reading').value) || 0;
                 
-                // ✅ 取得選項值（完全匹配 Dify）
                 let bubbleResult = document.getElementById('bubble-result').value;
                 let resazurinColor = document.getElementById('resazurin-color').value;
                 
-                // 如果是「請選擇」則改為空字串（表示未檢測）
                 if (bubbleResult === '請選擇') bubbleResult = '';
                 if (resazurinColor === '請選擇') resazurinColor = '';
 
@@ -460,9 +506,6 @@
                     conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
                     symptoms: document.getElementById('symptoms').value || ''
                 };
-
-                log(`📦 bubble_result: "${bubbleResult}"`, 'info');
-                log(`📦 resazurin_color: "${resazurinColor}"`, 'info');
 
                 // 更新資料庫
                 if (sb) {
