@@ -1,330 +1,471 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dr. Coolant - 切削液智能診斷系統</title>
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <style>
-        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px 0; }
-        .container { max-width: 600px; }
-        .card { border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: none; }
-        .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px 15px 0 0 !important; padding: 20px; }
-        .card-body { padding: 25px; }
-        .form-label { font-weight: 600; color: #333; margin-bottom: 8px; }
-        .form-control, .form-select { border-radius: 8px; border: 2px solid #e0e0e0; padding: 10px 15px; transition: all 0.3s; }
-        
-        .locked-input { background-color: #e9ecef !important; cursor: not-allowed; pointer-events: none; }
-
-        .form-control.is-filled, .form-select.is-filled, .locked-input.is-filled {
-            color: #0d6efd !important; font-weight: 700 !important; border-color: #0d6efd !important; background-color: #f8f9fa !important;
-        }
-
-        .ref-id-input { font-family: monospace; letter-spacing: 1px; color: #666 !important; font-weight: bold; background-color: #f0f0f0 !important; text-align: center; }
-
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; padding: 12px 30px; font-weight: 600; font-size: 1.1rem; width: 100%; }
-        .info-text { font-size: 0.85rem; color: #6c757d; margin-top: 5px; font-style: italic; }
-        .last-value-hint { font-size: 0.75rem; color: #28a745; margin-top: 3px; font-weight: 600; }
-        #loading { display: none; text-align: center; padding: 20px; }
-        .spinner-border { width: 3rem; height: 3rem; }
-        
-        /* 狀態訊息 */
-        .sync-status {
-            background: #d4edda; color: #155724; padding: 12px 15px; border-radius: 8px;
-            margin-bottom: 15px; display: none; font-weight: 600; text-align: center; border: 2px solid #c3e6cb;
-        }
-        .sync-status.show { display: block; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="card">
-            <div class="card-header text-center">
-                <h1>🔬 Dr. Coolant</h1>
-                <p class="mb-0">切削液智能診斷系統 v12.9</p>
-            </div>
-            
-            <div class="card-body">
-                <div id="sync-status" class="sync-status">✅ 機台資料已同步</div>
-                <div id="alert-container"></div>
-                
-                <div id="loading">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-3">資料載入中...</p>
-                </div>
-                
-                <form id="diagnostic-form" style="display:none;">
-                    <div class="mb-3"><label class="form-label">診斷單號</label><input type="text" class="form-control locked-input ref-id-input" id="ref-id" readonly></div>
-                    <div class="mb-3"><label class="form-label">機台編號 <span style="color:red">*</span></label><input type="text" class="form-control locked-input" id="machine-id" readonly required></div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-6"><label class="form-label">機台名稱</label><input type="text" class="form-control locked-input" id="machine-name" readonly></div>
-                        <div class="col-6"><label class="form-label">負責廠商</label><input type="text" class="form-control locked-input" id="vendor-code" readonly></div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">切削液種類 <span style="color:red">*</span></label>
-                        <select id="oil-type" class="form-select" required onchange="updateRangeHints()">
-                            <option value="">請選擇切削液種類</option>
-                            <option value="選項 1">選項 1：全合成 (Fully Synthetic)</option>
-                            <option value="選項 2">選項 2：半合成 (Semi-Synthetic)</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">pH 值 <span style="color:red">*</span></label>
-                        <input type="number" id="ph-value" class="form-control" step="0.1" placeholder="例如：9.2" required>
-                        <div id="ph-hint" class="info-text">正常範圍：8.5 - 9.5</div>
-                        <div id="ph-last-value" class="last-value-hint"></div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">Brix 讀數 (%) <span style="color:red">*</span></label>
-                        <input type="number" id="brix-reading" class="form-control" step="0.1" placeholder="例如：3.5" required>
-                        <div id="conc-hint" class="info-text">正常範圍：3.0 - 5.0%</div>
-                        <div id="brix-last-value" class="last-value-hint"></div>
-                    </div>
-
-                    <div class="mb-3"><label class="form-label">槽體容量 (L) <span style="color:red">*</span></label><input type="number" id="tank-size" class="form-control" step="1" placeholder="例如：200" required></div>
-                    
-                    <hr class="my-4">
-
-                    <div class="mb-3">
-                        <label class="form-label">💧 雙氧水氣泡測試</label>
-                        <select id="bubble-result" class="form-select">
-                            <option value="請選擇">請選擇</option>
-                            <option value="選項 1：無氣泡/微量氣泡（Level 1 - 安全）">選項 1：無氣泡/微量氣泡</option>
-                            <option value="選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡</option>
-                            <option value="選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）">選項 3：持續冒泡</option>
-                            <option value="選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">🧪 Dr. Coolant 細菌顯影</label>
-                        <select id="resazurin-color" class="form-select">
-                            <option value="請選擇">請選擇</option>
-                            <option value="選項 1：🔵 藍色（Level 1 - 安全）">選項 1：藍色</option>
-                            <option value="選項 2：🟣 紫色（Level 2 - 輕微感染）">選項 2：紫色</option>
-                            <option value="選項 3：🌸 粉紅色（Level 3 - 中度感染）">選項 3：粉紅色</option>
-                            <option value="選項 4：⚪ 無色透明（Level 4 - 嚴重感染）">選項 4：透明</option>
-                        </select>
-                    </div>
-
-                    <div class="mb-3"><label class="form-label">電導度 (μS/cm)</label><input type="number" id="conductivity" class="form-control" step="1" placeholder="選填"></div>
-                    <div class="mb-3"><label class="form-label">目標濃度 (%)</label><input type="number" id="target-conc" class="form-control" step="0.1" placeholder="選填"></div>
-                    <div class="mb-3"><label class="form-label">觀察症狀</label><textarea id="symptoms" class="form-control" rows="2" placeholder="選填"></textarea></div>
-
-                    <button type="submit" class="btn btn-primary mt-3">🚀 提交診斷</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-    <script>
-        const LIFF_ID = '2008738088-3ae3t9Qw';
-        const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
-        const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
-
-        let appSupabase = null;
-
-        function alertMsg(msg, type) {
-            document.getElementById('alert-container').innerHTML = 
-                `<div class="alert alert-${type} alert-dismissible fade show">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
-        }
-
-        function showSyncStatus() {
-            const status = document.getElementById('sync-status');
-            status.classList.add('show');
-            setTimeout(() => status.classList.remove('show'), 3000);
-        }
-
-        function checkInputColor(el) {
-            if (el.value && el.value.trim() !== '' && el.value !== '請選擇') el.classList.add('is-filled');
-            else el.classList.remove('is-filled');
-        }
-
-        function updateRangeHints() {
-            const oil = document.getElementById('oil-type');
-            checkInputColor(oil);
-            const val = oil.value;
-            const ph = document.getElementById('ph-hint');
-            const brix = document.getElementById('conc-hint');
-            
-            if (val.includes('選項 1')) {
-                ph.innerText = '正常範圍：8.5 - 9.5';
-                brix.innerText = '正常範圍：4.0 - 6.0%';
-            } else if (val.includes('選項 2')) {
-                ph.innerText = '正常範圍：8.8 - 9.5';
-                brix.innerText = '正常範圍：6.0 - 8.0%';
-            }
-        }
-
-        async function initApp() {
-            const now = new Date();
-            document.getElementById('ref-id').value = `LOG-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
-
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('diagnostic-form').style.display = 'none';
-
-            if(window.supabase) {
-                appSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            }
-
-            const params = new URLSearchParams(window.location.search);
-            let mid = params.get('machine_id');
-            
-            if(!mid && liff.getContext()) {
-                const url = liff.getContext().endpointUrl;
-                if(url && url.includes('?')) mid = new URLSearchParams(url.split('?')[1]).get('machine_id');
-            }
-
-            if(!mid) {
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('diagnostic-form').style.display = 'block';
-                alertMsg('⚠️ 請掃描 QR Code', 'warning');
-                return;
-            }
-
-            document.getElementById('machine-id').value = mid;
-            checkInputColor(document.getElementById('machine-id'));
-
-            if(appSupabase) {
-                const { data, error } = await appSupabase.from('machines').select('*').eq('machine_id', mid).single();
-                if(data) {
-                    const set = (id, v) => { 
-                        const el = document.getElementById(id);
-                        if(v && el) { el.value = v; checkInputColor(el); }
-                    };
-                    
-                    set('machine-name', data.machine_name);
-                    set('vendor-code', data.vendor);
-                    set('tank-size', data.capacity);
-                    set('target-conc', data.target_conc);
-                    
-                    if(data.oil_code) {
-                        const oc = String(data.oil_code);
-                        const sel = document.getElementById('oil-type');
-                        if(oc.includes('1')) sel.value='選項 1';
-                        else if(oc.includes('2')) sel.value='選項 2';
-                        checkInputColor(sel);
-                        updateRangeHints();
-                    }
-
-                    if(data.last_ph) document.getElementById('ph-last-value').innerText = `上次: ${data.last_ph}`;
-                    if(data.last_brix) document.getElementById('brix-last-value').innerText = `上次: ${data.last_brix}%`;
-                    
-                    showSyncStatus();
-                }
-            }
-
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('diagnostic-form').style.display = 'block';
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('input, select').forEach(el => {
-                el.addEventListener('input', () => checkInputColor(el));
-                el.addEventListener('change', () => checkInputColor(el));
-            });
-
-            liff.init({ liffId: LIFF_ID }).then(() => {
-                if(!liff.isLoggedIn()) liff.login();
-                else initApp();
-            }).catch(e => {
-                console.error(e);
-                initApp();
-            });
-            
-            // 載入逾時保護
-            setTimeout(() => {
-                const loading = document.getElementById('loading');
-                if (loading.style.display !== 'none') {
-                    loading.style.display = 'none';
-                    document.getElementById('diagnostic-form').style.display = 'block';
-                }
-            }, 5000);
-        });
-
-        document.getElementById('diagnostic-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('diagnostic-form').style.display = 'none';
-
-            try {
-                let profile = {};
-                try { profile = await liff.getProfile(); } catch(e) {}
-
-                const parse = (id) => {
-                    const v = parseFloat(document.getElementById(id).value);
-                    return isNaN(v) ? 0 : v;
-                };
-
-                const mid = document.getElementById('machine-id').value;
-                const tank = parse('tank-size');
-                const target = parse('target-conc');
-                const oilVal = document.getElementById('oil-type').value;
-                
-                let bubble = document.getElementById('bubble-result').value;
-                if(bubble === '請選擇') bubble = '';
-                
-                let resazurin = document.getElementById('resazurin-color').value;
-                if(resazurin === '請選擇') resazurin = '';
-
-                const payload = {
-                    ref_id: document.getElementById('ref-id').value,
-                    userId: profile.userId || 'Guest',
-                    displayName: profile.displayName || 'User',
-                    machine_id: mid,
-                    oil_type: oilVal,
-                    ph_value: parse('ph-value'),
-                    brix_reading: parse('brix-reading'),
-                    tank_size: tank,
-                    target_conc: target,
-                    bubble_result: bubble,
-                    resazurin_color: resazurin,
-                    conductivity: parse('conductivity'),
-                    symptoms: document.getElementById('symptoms').value || ''
-                };
-
-                if(appSupabase) {
-                    const oilCode = oilVal.includes('1') ? 1 : 2;
-                    await appSupabase.from('machines').update({
-                        capacity: tank,
-                        target_conc: target,
-                        oil_code: oilCode,
-                        last_ph: payload.ph_value,
-                        last_brix: payload.brix_reading,
-                        last_checked: new Date().toISOString()
-                    }).eq('machine_id', mid);
-                }
-
-                const res = await fetch(WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if(res.ok) {
-                    alertMsg('✅ 診斷成功！設定已保存', 'success');
-                    setTimeout(() => liff.closeWindow(), 2000);
-                } else {
-                    throw new Error('Server Error');
-                }
-            } catch(err) {
-                console.error(err);
-                alertMsg('❌ 提交失敗，請檢查網路', 'danger');
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('diagnostic-form').style.display = 'block';
-            }
-        });
-    </script>
-</body>
-</html>
+	<!DOCTYPE html>
+     2	<html lang="zh-TW">
+     3	<head>
+     4	    <meta charset="UTF-8">
+     5	    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     6	    <title>Dr. Coolant - 切削液智能診斷系統</title>
+     7	    
+     8	    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+     9	    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    10	    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    11	    
+    12	    <style>
+    13	        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px 0; }
+    14	        .container { max-width: 600px; }
+    15	        .card { border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: none; }
+    16	        .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px 15px 0 0 !important; padding: 20px; }
+    17	        .card-body { padding: 25px; }
+    18	        .form-label { font-weight: 600; color: #333; margin-bottom: 8px; }
+    19	        .form-control, .form-select { border-radius: 8px; border: 2px solid #e0e0e0; padding: 10px 15px; transition: all 0.3s; }
+    20	        
+    21	        .locked-input { background-color: #e9ecef !important; cursor: not-allowed; pointer-events: none; }
+    22	        .form-control.is-filled, .form-select.is-filled, .locked-input.is-filled {
+    23	            color: #0d6efd !important; font-weight: 700 !important; border-color: #0d6efd !important; background-color: #f8f9fa !important;
+    24	        }
+    25	        .ref-id-input { font-family: monospace; letter-spacing: 1px; color: #666 !important; font-weight: bold; background-color: #f0f0f0 !important; text-align: center; }
+    26	        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; padding: 12px 30px; font-weight: 600; font-size: 1.1rem; width: 100%; }
+    27	        .info-text { font-size: 0.85rem; color: #6c757d; margin-top: 5px; font-style: italic; }
+    28	        .last-value-hint { font-size: 0.75rem; color: #28a745; margin-top: 3px; font-weight: 600; }
+    29	        
+    30	        #loading { text-align: center; padding: 20px; }
+    31	        #diagnostic-form { display: none; }
+    32	        
+    33	        .spinner-border { width: 3rem; height: 3rem; }
+    34	        .sync-status {
+    35	            background: #d4edda;
+    36	            color: #155724;
+    37	            padding: 12px 15px;
+    38	            border-radius: 8px;
+    39	            margin-bottom: 15px;
+    40	            display: none;
+    41	            font-weight: 600;
+    42	            text-align: center;
+    43	            border: 2px solid #c3e6cb;
+    44	        }
+    45	        .sync-status.show { display: block; }
+    46	    </style>
+    47	</head>
+    48	<body>
+    49	    <div class="container">
+    50	        <div class="card">
+    51	            <div class="card-header text-center">
+    52	                <h1>🔬 Dr. Coolant</h1>
+    53	                <p class="mb-0">切削液智能診斷系統 v12.9 DEBUG</p>
+    54	            </div>
+    55	            
+    56	            <div class="card-body">
+    57	                <div id="sync-status" class="sync-status">✅ 機台資料已同步</div>
+    58	                <div id="alert-container"></div>
+    59	                
+    60	                <div id="loading">
+    61	                    <div class="spinner-border text-primary" role="status"></div>
+    62	                    <p class="mt-3" id="loading-text">正在初始化...</p>
+    63	                </div>
+    64	                
+    65	                <form id="diagnostic-form">
+    66	                    <div class="mb-3">
+    67	                        <label class="form-label">診斷單號</label>
+    68	                        <input type="text" class="form-control locked-input ref-id-input" id="ref-id" readonly>
+    69	                    </div>
+    70	                    <div class="mb-3">
+    71	                        <label class="form-label">機台編號 <span style="color:red">*</span></label>
+    72	                        <input type="text" class="form-control locked-input" id="machine-id" readonly required>
+    73	                    </div>
+    74	                    <div class="row mb-3">
+    75	                        <div class="col-6">
+    76	                            <label class="form-label">機台名稱</label>
+    77	                            <input type="text" class="form-control locked-input" id="machine-name" readonly>
+    78	                        </div>
+    79	                        <div class="col-6">
+    80	                            <label class="form-label">負責廠商</label>
+    81	                            <input type="text" class="form-control locked-input" id="vendor-code" readonly>
+    82	                        </div>
+    83	                    </div>
+    84	                    <div class="mb-3">
+    85	                        <label class="form-label">切削液種類 <span style="color:red">*</span></label>
+    86	                        <select id="oil-type" class="form-select" required>
+    87	                            <option value="">請選擇切削液種類</option>
+    88	                            <option value="選項 1">選項 1：全合成 (Fully Synthetic)</option>
+    89	                            <option value="選項 2">選項 2：半合成 (Semi-Synthetic)</option>
+    90	                        </select>
+    91	                    </div>
+    92	                    <div class="mb-3">
+    93	                        <label class="form-label">pH 值 <span style="color:red">*</span></label>
+    94	                        <input type="number" id="ph-value" class="form-control" step="0.1" placeholder="例如：9.2" required>
+    95	                        <div id="ph-hint" class="info-text">正常範圍：8.5 - 9.5</div>
+    96	                        <div id="ph-last-value" class="last-value-hint"></div>
+    97	                    </div>
+    98	                    <div class="mb-3">
+    99	                        <label class="form-label">Brix 讀數 (%) <span style="color:red">*</span></label>
+   100	                        <input type="number" id="brix-reading" class="form-control" step="0.1" placeholder="例如：3.5" required>
+   101	                        <div id="conc-hint" class="info-text">正常範圍：3.0 - 5.0%</div>
+   102	                        <div id="brix-last-value" class="last-value-hint"></div>
+   103	                    </div>
+   104	                    <div class="mb-3">
+   105	                        <label class="form-label">槽體容量 (L) <span style="color:red">*</span></label>
+   106	                        <input type="number" id="tank-size" class="form-control" step="1" placeholder="例如：200" required>
+   107	                    </div>
+   108	                    <hr class="my-4">
+   109	                    <div class="mb-3">
+   110	                        <label class="form-label">💧 雙氧水氣泡測試</label>
+   111	                        <select id="bubble-result" class="form-select">
+   112	                            <option value="請選擇">請選擇</option>
+   113	                            <option value="選項 1：無氣泡/微量氣泡（Level 1 - 安全）">選項 1：無氣泡/微量氣泡（Level 1 - 安全）</option>
+   114	                            <option value="選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）</option>
+   115	                            <option value="選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）">選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）</option>
+   116	                            <option value="選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）</option>
+   117	                        </select>
+   118	                    </div>
+   119	                    <div class="mb-3">
+   120	                        <label class="form-label">🧪 Dr. Coolant 細菌顯影</label>
+   121	                        <select id="resazurin-color" class="form-select">
+   122	                            <option value="請選擇">請選擇</option>
+   123	                            <option value="選項 1：🔵 藍色（Level 1 - 安全）">選項 1：🔵 藍色（Level 1 - 安全）</option>
+   124	                            <option value="選項 2：🟣 紫色（Level 2 - 輕微感染）">選項 2：🟣 紫色（Level 2 - 輕微感染）</option>
+   125	                            <option value="選項 3：🌸 粉紅色（Level 3 - 中度感染）">選項 3：🌸 粉紅色（Level 3 - 中度感染）</option>
+   126	                            <option value="選項 4：⚪ 無色透明（Level 4 - 嚴重感染）">選項 4：⚪ 無色透明（Level 4 - 嚴重感染）</option>
+   127	                        </select>
+   128	                    </div>
+   129	                    <div class="mb-3">
+   130	                        <label class="form-label">電導度 (μS/cm)</label>
+   131	                        <input type="number" id="conductivity" class="form-control" step="1" placeholder="選填">
+   132	                    </div>
+   133	                    <div class="mb-3">
+   134	                        <label class="form-label">目標濃度 (%)</label>
+   135	                        <input type="number" id="target-conc" class="form-control" step="0.1" placeholder="選填">
+   136	                    </div>
+   137	                    <div class="mb-3">
+   138	                        <label class="form-label">觀察症狀</label>
+   139	                        <textarea id="symptoms" class="form-control" rows="2" placeholder="選填"></textarea>
+   140	                    </div>
+   141	                    <button type="submit" class="btn btn-primary mt-3">🚀 提交診斷</button>
+   142	                </form>
+   143	            </div>
+   144	        </div>
+   145	    </div>
+   146	
+   147	    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+   148	    <script>
+   149	        // ✅ 請確認此 LIFF ID 是否正確
+   150	        const LIFF_ID = '2008738088-3ae3t9Qw';
+   151	        const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
+   152	        const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
+   153	        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
+   154	
+   155	        let sb = null;
+   156	        let liffReady = false;
+   157	
+   158	        function updateLoadingText(text) {
+   159	            document.getElementById('loading-text').textContent = text;
+   160	        }
+   161	
+   162	        function showAlert(msg, type) {
+   163	            document.getElementById('alert-container').innerHTML = 
+   164	                `<div class="alert alert-${type} alert-dismissible fade show">${msg}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
+   165	        }
+   166	        
+   167	        function showSyncStatus() {
+   168	            const status = document.getElementById('sync-status');
+   169	            status.classList.add('show');
+   170	            setTimeout(() => status.classList.remove('show'), 3000);
+   171	        }
+   172	
+   173	        function generateRefId() {
+   174	            const now = new Date();
+   175	            return `LOG-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+   176	        }
+   177	
+   178	        function markFilled(el) {
+   179	            if (el && el.value && el.value.trim() !== '' && el.value !== '請選擇') {
+   180	                el.classList.add('is-filled');
+   181	            }
+   182	        }
+   183	
+   184	        function updateHints() {
+   185	            const oil = document.getElementById('oil-type');
+   186	            markFilled(oil);
+   187	            const val = oil.value;
+   188	            const ph = document.getElementById('ph-hint');
+   189	            const brix = document.getElementById('conc-hint');
+   190	            
+   191	            if (val === '選項 1') {
+   192	                ph.textContent = '正常範圍：8.5 - 9.5';
+   193	                brix.textContent = '正常範圍：4.0 - 6.0%';
+   194	            } else if (val === '選項 2') {
+   195	                ph.textContent = '正常範圍：8.8 - 9.5';
+   196	                brix.textContent = '正常範圍：6.0 - 8.0%';
+   197	            }
+   198	        }
+   199	
+   200	        async function initSupabase() {
+   201	            updateLoadingText('正在連接資料庫...');
+   202	            return new Promise((resolve) => {
+   203	                let attempts = 0;
+   204	                const maxAttempts = 10;
+   205	                
+   206	                const check = () => {
+   207	                    if (typeof window.supabase !== 'undefined') {
+   208	                        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+   209	                        console.log('✅ Supabase 初始化成功');
+   210	                        resolve(true);
+   211	                    } else if (attempts < maxAttempts) {
+   212	                        attempts++;
+   213	                        setTimeout(check, 300);
+   214	                    } else {
+   215	                        console.warn('⚠️ Supabase SDK 載入超時');
+   216	                        resolve(false);
+   217	                    }
+   218	                };
+   219	                check();
+   220	            });
+   221	        }
+   222	
+   223	        async function loadData(id) {
+   224	            if (!sb) {
+   225	                console.warn('❌ Supabase 未初始化');
+   226	                return null;
+   227	            }
+   228	            
+   229	            updateLoadingText('正在查詢機台資料...');
+   230	            
+   231	            try {
+   232	                const { data, error } = await sb
+   233	                    .from('machines')
+   234	                    .select('*')
+   235	                    .eq('machine_id', id)
+   236	                    .single();
+   237	
+   238	                if (error || !data) {
+   239	                    console.warn('⚠️ 查詢失敗或無資料:', error);
+   240	                    return null;
+   241	                }
+   242	                
+   243	                console.log('✅ 查詢成功');
+   244	                return data;
+   245	            } catch (e) {
+   246	                console.error('❌ 查詢例外:', e);
+   247	                return null;
+   248	            }
+   249	        }
+   250	
+   251	        function fillForm(data) {
+   252	            const set = (id, val) => {
+   253	                const el = document.getElementById(id);
+   254	                if (el && val != null && val !== '') {
+   255	                    el.value = val;
+   256	                    markFilled(el);
+   257	                }
+   258	            };
+   259	
+   260	            set('machine-name', data.machine_name);
+   261	            set('vendor-code', data.vendor);
+   262	            set('tank-size', data.capacity);
+   263	            set('target-conc', data.target_conc);
+   264	
+   265	            if (data.oil_code) {
+   266	                const oil = document.getElementById('oil-type');
+   267	                const code = String(data.oil_code).trim();
+   268	                if (code === '1') oil.value = '選項 1';
+   269	                else if (code === '2') oil.value = '選項 2';
+   270	                markFilled(oil);
+   271	                updateHints();
+   272	            }
+   273	
+   274	            if (data.last_ph) {
+   275	                document.getElementById('ph-last-value').textContent = `💡 上次：pH ${data.last_ph}`;
+   276	            }
+   277	            if (data.last_brix) {
+   278	                document.getElementById('brix-last-value').textContent = `💡 上次：${data.last_brix}%`;
+   279	            }
+   280	        }
+   281	
+   282	        async function init() {
+   283	            console.log('🚀 開始初始化');
+   284	            
+   285	            const refId = generateRefId();
+   286	            document.getElementById('ref-id').value = refId;
+   287	
+   288	            await initSupabase();
+   289	            
+   290	            updateLoadingText('正在取得機台編號...');
+   291	            
+   292	            // ✅ 優先從 URL 取得 machine_id
+   293	            const params = new URLSearchParams(window.location.search);
+   294	            let mid = params.get('machine_id');
+   295	
+   296	            // ✅ 如果 URL 沒有，且 LIFF 已初始化，則從 LIFF Context 取得
+   297	            if (!mid && liffReady) {
+   298	                try {
+   299	                    const ctx = liff.getContext();
+   300	                    if (ctx && ctx.endpointUrl) {
+   301	                        const url = new URL(ctx.endpointUrl);
+   302	                        mid = url.searchParams.get('machine_id');
+   303	                        console.log('📥 從 LIFF Context 取得 machine_id:', mid);
+   304	                    }
+   305	                } catch (e) {
+   306	                    console.warn('⚠️ 無法取得 LIFF Context');
+   307	                }
+   308	            }
+   309	
+   310	            if (!mid) {
+   311	                console.warn('⚠️ 無 machine_id');
+   312	                document.getElementById('loading').style.display = 'none';
+   313	                document.getElementById('diagnostic-form').style.display = 'block';
+   314	                showAlert('⚠️ 未偵測到機台編號，請手動輸入', 'warning');
+   315	                return;
+   316	            }
+   317	
+   318	            console.log('✅ 機台編號:', mid);
+   319	            document.getElementById('machine-id').value = mid;
+   320	            markFilled(document.getElementById('machine-id'));
+   321	
+   322	            const data = await loadData(mid);
+   323	            
+   324	            document.getElementById('loading').style.display = 'none';
+   325	            document.getElementById('diagnostic-form').style.display = 'block';
+   326	            
+   327	            if (data) {
+   328	                fillForm(data);
+   329	                showSyncStatus();
+   330	            } else {
+   331	                console.warn('⚠️ 無法載入機台資料');
+   332	                showAlert('⚠️ 無法載入機台資料，請手動填寫', 'warning');
+   333	            }
+   334	        }
+   335	
+   336	        document.addEventListener('DOMContentLoaded', () => {
+   337	            console.log('🌐 頁面載入完成');
+   338	            updateLoadingText('正在初始化 LIFF...');
+   339	            
+   340	            document.querySelectorAll('.form-control, .form-select').forEach(el => {
+   341	                el.addEventListener('input', () => markFilled(el));
+   342	                el.addEventListener('change', () => markFilled(el));
+   343	            });
+   344	            document.getElementById('oil-type').addEventListener('change', updateHints);
+   345	
+   346	            console.log('🔐 開始初始化 LIFF, ID:', LIFF_ID);
+   347	            
+   348	            liff.init({ liffId: LIFF_ID })
+   349	                .then(() => {
+   350	                    console.log('✅ LIFF 初始化成功');
+   351	                    liffReady = true;
+   352	                    
+   353	                    if (!liff.isLoggedIn()) {
+   354	                        console.log('⚠️ 未登入，導向登入頁');
+   355	                        liff.login();
+   356	                        return;  // ✅ 登入後會重新載入頁面
+   357	                    }
+   358	                    
+   359	                    console.log('✅ 已登入');
+   360	                    init();
+   361	                })
+   362	                .catch(err => {
+   363	                    console.error('❌ LIFF 初始化失敗:', err);
+   364	                    
+   365	                    // ✅ 顯示錯誤訊息給使用者
+   366	                    showAlert(`❌ LINE 登入失敗: ${err.message}<br>請確認 LIFF 設定正確`, 'danger');
+   367	                    
+   368	                    // ✅ 仍然嘗試初始化（使用 URL 參數）
+   369	                    console.log('⚠️ 嘗試使用 URL 參數繼續初始化');
+   370	                    init();
+   371	                });
+   372	        });
+   373	
+   374	        document.getElementById('diagnostic-form').addEventListener('submit', async (e) => {
+   375	            e.preventDefault();
+   376	            console.log('📤 開始提交表單');
+   377	            
+   378	            document.getElementById('loading').style.display = 'block';
+   379	            document.getElementById('diagnostic-form').style.display = 'none';
+   380	            updateLoadingText('正在提交診斷...');
+   381	
+   382	            try {
+   383	                let profile = {};
+   384	                if (liffReady) {
+   385	                    try {
+   386	                        profile = await liff.getProfile();
+   387	                        console.log('👤', profile.displayName);
+   388	                    } catch (e) {
+   389	                        console.warn('⚠️ 無法取得 Profile');
+   390	                    }
+   391	                }
+   392	
+   393	                const machineId = document.getElementById('machine-id').value;
+   394	                const tankSize = parseFloat(document.getElementById('tank-size').value) || 0;
+   395	                const targetConc = parseFloat(document.getElementById('target-conc').value) || 0;
+   396	                const oilType = document.getElementById('oil-type').value;
+   397	                const oilCode = oilType === '選項 1' ? '1' : '2';
+   398	                const phValue = parseFloat(document.getElementById('ph-value').value) || 0;
+   399	                const brixReading = parseFloat(document.getElementById('brix-reading').value) || 0;
+   400	                
+   401	                let bubbleResult = document.getElementById('bubble-result').value;
+   402	                let resazurinColor = document.getElementById('resazurin-color').value;
+   403	                if (bubbleResult === '請選擇') bubbleResult = '';
+   404	                if (resazurinColor === '請選擇') resazurinColor = '';
+   405	
+   406	                const formData = {
+   407	                    ref_id: document.getElementById('ref-id').value,
+   408	                    userId: profile.userId || 'Guest',
+   409	                    displayName: profile.displayName || 'User',
+   410	                    machine_id: machineId,
+   411	                    machine_name: document.getElementById('machine-name').value || '',
+   412	                    vendor: document.getElementById('vendor-code').value || '',
+   413	                    oil_type: oilType,
+   414	                    ph_value: phValue,
+   415	                    brix_reading: brixReading,
+   416	                    tank_size: tankSize,
+   417	                    target_conc: targetConc,
+   418	                    bubble_result: bubbleResult,
+   419	                    resazurin_color: resazurinColor,
+   420	                    conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
+   421	                    symptoms: document.getElementById('symptoms').value || ''
+   422	                };
+   423	
+   424	                if (sb) {
+   425	                    console.log('💾 更新資料庫...');
+   426	                    try {
+   427	                        await sb.from('machines').update({
+   428	                            capacity: tankSize,
+   429	                            target_conc: targetConc,
+   430	                            oil_code: oilCode,
+   431	                            last_ph: phValue,
+   432	                            last_brix: brixReading,
+   433	                            last_checked: new Date().toISOString()
+   434	                        }).eq('machine_id', machineId);
+   435	                        console.log('✅ 資料庫已更新');
+   436	                    } catch (err) {
+   437	                        console.error('❌ 資料庫更新失敗:', err);
+   438	                    }
+   439	                }
+   440	
+   441	                console.log('📡 傳送 Webhook...');
+   442	                const res = await fetch(WEBHOOK_URL, {
+   443	                    method: 'POST',
+   444	                    headers: { 'Content-Type': 'application/json' },
+   445	                    body: JSON.stringify(formData)
+   446	                });
+   447	
+   448	                if (res.ok) {
+   449	                    console.log('✅ 提交成功');
+   450	                    document.getElementById('loading').style.display = 'none';
+   451	                    showAlert('✅ 診斷完成！設定已保存', 'success');
+   452	                    
+   453	                    setTimeout(() => {
+   454	                        if (liffReady && liff.isInClient()) {
+   455	                            console.log('🚪 關閉 LIFF 視窗');
+   456	                            liff.closeWindow();
+   457	                        }
+   458	                    }, 2000);
+   459	                } else {
+   460	                    throw new Error(`HTTP ${res.status}`);
+   461	                }
+   462	            } catch (err) {
+   463	                console.error('❌ 提交失敗:', err);
+   464	                showAlert('❌ 提交失敗，請重試', 'danger');
+   465	                document.getElementById('loading').style.display = 'none';
+   466	                document.getElementById('diagnostic-form').style.display = 'block';
+   467	            }
+   468	        });
+   469	    </script>
+   470	</body>
+   471	</html>
