@@ -16,122 +16,24 @@
             min-height: 100vh;
             padding: 20px 0;
         }
-        
-        .container {
-            max-width: 600px;
-        }
-        
-        .card {
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            border: none;
-        }
-        
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            padding: 20px;
-        }
-        
-        .card-header h1 {
-            font-size: 1.5rem;
-            margin: 0;
-            font-weight: bold;
-        }
-        
-        .card-body {
-            padding: 25px;
-        }
-        
-        .form-label {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 8px;
-        }
-        
-        .form-control, .form-select {
-            border-radius: 8px;
-            border: 2px solid #e0e0e0;
-            padding: 10px 15px;
-            transition: all 0.3s;
-        }
-        
-        /* 🔒 鎖定欄位樣式 (灰色背景 + 禁止游標) */
-        .locked-input {
-            background-color: #e9ecef !important;
-            cursor: not-allowed;
-            color: #495057; /* 鎖定欄位維持深灰色，不變藍 */
-        }
-
-        /* 🖊️ 有資料時的樣式 (藍色粗體 - 針對可編輯欄位) */
-        .is-filled {
-            color: #0d6efd !important;
-            font-weight: bold !important;
-            border-color: #0d6efd !important;
-            background-color: #f8f9fa;
-        }
-        
-        /* 鎖定欄位即使有資料，也不要變藍色，保持專業感 */
-        .locked-input.is-filled {
-            color: #0d6efd !important; /* 如果您希望鎖定的也變藍，保留這行；不希望則刪除 */
-        }
-
-        .last-value-hint {
-            font-size: 0.75rem;
-            color: #28a745;
-            margin-top: 3px;
-            font-weight: 600;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-            border-radius: 8px;
-            padding: 12px 30px;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: all 0.3s;
-            width: 100%;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-        
-        .required-mark {
-            color: #dc3545;
-            font-weight: bold;
-        }
-        
-        .info-text {
-            font-size: 0.85rem;
-            color: #6c757d;
-            margin-top: 5px;
-            font-style: italic;
-        }
-        
-        .section-divider {
-            border-top: 2px solid #e0e0e0;
-            margin: 25px 0;
-        }
-        
-        .alert {
-            border-radius: 8px;
-            border: none;
-        }
-        
-        #loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-        }
+        .container { max-width: 600px; }
+        .card { border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: none; }
+        .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 15px 15px 0 0 !important; padding: 20px; }
+        .card-header h1 { font-size: 1.5rem; margin: 0; font-weight: bold; }
+        .card-body { padding: 25px; }
+        .form-label { font-weight: 600; color: #333; margin-bottom: 8px; }
+        .form-control, .form-select { border-radius: 8px; border: 2px solid #e0e0e0; padding: 10px 15px; transition: all 0.3s; }
+        .locked-input { background-color: #e9ecef !important; cursor: not-allowed; }
+        .is-filled { color: #0d6efd !important; font-weight: bold !important; border-color: #0d6efd !important; background-color: #f8f9fa; }
+        .last-value-hint { font-size: 0.75rem; color: #28a745; margin-top: 3px; font-weight: 600; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; padding: 12px 30px; font-weight: 600; font-size: 1.1rem; transition: all 0.3s; width: 100%; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        .required-mark { color: #dc3545; font-weight: bold; }
+        .info-text { font-size: 0.85rem; color: #6c757d; margin-top: 5px; font-style: italic; }
+        .section-divider { border-top: 2px solid #e0e0e0; margin: 25px 0; }
+        .alert { border-radius: 8px; border: none; }
+        #loading { display: none; text-align: center; padding: 20px; }
+        .spinner-border { width: 3rem; height: 3rem; }
     </style>
 </head>
 <body>
@@ -139,7 +41,7 @@
         <div class="card">
             <div class="card-header text-center">
                 <h1>🔬 Dr. Coolant</h1>
-                <p class="mb-0">切削液智能診斷系統 v11.7</p>
+                <p class="mb-0">切削液智能診斷系統 v11.6</p>
             </div>
             
             <div class="card-body">
@@ -176,7 +78,7 @@
                         <label for="oil-type" class="form-label">
                             切削液種類 <span class="required-mark">*</span>
                         </label>
-                        <select id="oil-type" class="form-select" required onchange="updateRangeHints()">
+                        <select id="oil-type" class="form-select locked-input" required readonly onchange="updateRangeHints()">
                             <option value="">請選擇切削液種類</option>
                             <option value="選項 1">選項 1：全合成 (Fully Synthetic)</option>
                             <option value="選項 2">選項 2：半合成 (Semi-Synthetic)</option>
@@ -207,8 +109,8 @@
                         <label for="tank-size" class="form-label">
                             槽體容量 (L) <span class="required-mark">*</span>
                         </label>
-                        <input type="number" id="tank-size" class="form-control" 
-                               step="1" min="0" placeholder="例如：200" required>
+                        <input type="number" id="tank-size" class="form-control locked-input" 
+                               step="1" min="0" placeholder="例如：200" readonly required>
                     </div>
 
                     <div class="section-divider"></div>
@@ -257,8 +159,8 @@
                         <label for="target-conc" class="form-label">
                             目標濃度 (%)
                         </label>
-                        <input type="number" id="target-conc" class="form-control" 
-                               step="0.1" min="0" placeholder="例如：5.0">
+                        <input type="number" id="target-conc" class="form-control locked-input" 
+                               step="0.1" min="0" placeholder="例如：5.0" readonly>
                     </div>
 
                     <div class="mb-3">
@@ -286,10 +188,11 @@
         const LIFF_ID = '2008738088-3ae3t9Qw';
         const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
         
-        // ✅ Supabase 配置
+        // ✅ Supabase 配置 (使用您提供的正確 JWT Key)
         const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
         
+        // 🚨 修正：變更變數名稱為 supabaseClient，避免與全域變數衝突
         let supabaseClient = null;
         
         try {
@@ -305,7 +208,6 @@
 
         // ===== 核心功能：檢查欄位是否填寫，變更顏色 =====
         function checkInputColor(inputElement) {
-            // 如果有值，加上 .is-filled 樣式 (藍色粗體)
             if (inputElement.value && inputElement.value.trim() !== '' && inputElement.value !== '請選擇') {
                 inputElement.classList.add('is-filled');
             } else {
@@ -329,11 +231,10 @@
                 phHint.innerText = "正常範圍：8.5 - 9.5";
                 concHint.innerText = "正常範圍：3.0 - 5.0%";
             }
-            // 確保顏色變更
             checkInputColor(document.getElementById('oil-type'));
         }
 
-        // ===== 從 Supabase 讀取機台資料 =====
+        // ===== 從 Supabase 讀取機台資料 (修正版 v11.6) =====
         async function loadMachineData(machineId) {
             if (!supabaseClient) {
                 console.warn('⚠️ Supabase 未連線');
@@ -343,6 +244,8 @@
 
             try {
                 console.log(`🔍 正在讀取機台 ${machineId}...`);
+                
+                // 使用 supabaseClient 進行查詢
                 const { data, error } = await supabaseClient
                     .from('machines')
                     .select('*')
@@ -371,9 +274,11 @@
 
         // ===== 啟動函式：自動填入機台資料 =====
         async function initFormLogic() {
+            // 1. 抓取 URL 參數
             const urlParams = new URLSearchParams(window.location.search);
             let machineId = urlParams.get('machine_id');
 
+            // 2. LIFF Context 備援
             if (!machineId && liff.getContext()) {
                 if (liff.getContext().endpointUrl && liff.getContext().endpointUrl.includes('?')) {
                     const query = liff.getContext().endpointUrl.split('?')[1];
@@ -387,46 +292,47 @@
                 return;
             }
             
-            // 填入機台 ID (鎖定)
+            // 3. 填入機台 ID
             document.getElementById('machine-id').value = machineId;
             checkInputColor(document.getElementById('machine-id'));
             
-            // 從資料庫讀取詳細資料
+            // 4. 從資料庫讀取詳細資料
             const machineData = await loadMachineData(machineId);
             
             if (machineData) {
-                // 自動填入：機台名稱 (鎖定)
+                // 自動填入：機台名稱 (對應 machine_name)
                 if (machineData.machine_name) {
                     const el = document.getElementById('machine-name');
                     el.value = machineData.machine_name;
                     checkInputColor(el);
                 }
                 
-                // 自動填入：廠商 (鎖定)
+                // 自動填入：廠商 (對應 vendor)
                 if (machineData.vendor) {
                     const el = document.getElementById('vendor-code');
                     el.value = machineData.vendor;
                     checkInputColor(el);
                 }
                 
-                // 自動填入：容量 (可修改)
+                // 自動填入：容量 (對應 capacity -> tank-size)
                 if (machineData.capacity) {
                     const el = document.getElementById('tank-size');
                     el.value = machineData.capacity;
                     checkInputColor(el);
                 }
                 
-                // 自動填入：目標濃度 (可修改)
+                // 自動填入：目標濃度 (對應 target_conc)
                 if (machineData.target_conc) {
                     const el = document.getElementById('target-conc');
                     el.value = machineData.target_conc;
                     checkInputColor(el);
                 }
                 
-                // 自動填入：油品類型 (可修改)
+                // 🔥 自動填入：油品類型 (修正數字轉文字的問題)
+                // 資料庫 oil_code 存的是 "2" (String) 或 2 (Number)
                 if (machineData.oil_code) {
                     const el = document.getElementById('oil-type');
-                    let code = String(machineData.oil_code).trim();
+                    let code = String(machineData.oil_code).trim(); // 強制轉成文字並去空白
                     
                     if (code === "1" || code === "選項 1") {
                         el.value = "選項 1";
@@ -438,23 +344,14 @@
                     updateRangeHints();
                 }
                 
-                // 顯示上次檢測值
+                // 顯示上次檢測值 (如果有)
                 if (machineData.last_brix) {
                     document.getElementById('brix-last-value').innerText = `💡 上次：${machineData.last_brix}%`;
                 }
                 if (machineData.last_ph) {
                     document.getElementById('ph-last-value').innerText = `💡 上次：pH ${machineData.last_ph}`;
                 }
-                
-                showAlert('✅ 機台資料已自動載入', 'success');
             }
-            
-            // 監聽所有輸入欄位 (確保修改時變色)
-            const allInputs = document.querySelectorAll('.form-control, .form-select');
-            allInputs.forEach(input => {
-                input.addEventListener('input', () => checkInputColor(input));
-                input.addEventListener('change', () => checkInputColor(input));
-            });
         }
 
         // ===== LIFF 初始化 =====
@@ -467,6 +364,7 @@
                 }
             }).catch((err) => {
                 console.error('LIFF Error:', err);
+                // 即使 LIFF 失敗，也要嘗試讀取 URL 參數 (方便電腦版測試)
                 initFormLogic();
             });
         });
@@ -506,7 +404,7 @@
                     showAlert('✅ 診斷完成！結果將發送到 LINE', 'success');
                     setTimeout(() => liff.closeWindow(), 3000);
                 } else {
-                    showAlert('提交失敗', 'danger');
+                    showAlert('提交失敗 (錯誤: ' + response.status + ')', 'danger');
                     document.getElementById('diagnostic-form').style.display = 'block';
                     document.getElementById('loading').style.display = 'none';
                 }
