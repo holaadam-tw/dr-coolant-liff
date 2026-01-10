@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dr. Coolant - 切削液智能診斷系統</title>
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px 0; }
         .container { max-width: 600px; }
@@ -15,17 +17,38 @@
         .card-body { padding: 25px; }
         .form-label { font-weight: 600; color: #333; margin-bottom: 8px; }
         .form-control, .form-select { border-radius: 8px; border: 2px solid #e0e0e0; padding: 10px 15px; transition: all 0.3s; }
+        
         .locked-input { background-color: #e9ecef !important; cursor: not-allowed; pointer-events: none; }
+
         .form-control.is-filled, .form-select.is-filled, .locked-input.is-filled {
             color: #0d6efd !important; font-weight: 700 !important; border-color: #0d6efd !important; background-color: #f8f9fa !important;
         }
-        .ref-id-input { font-family: monospace; color: #666 !important; background-color: #f0f0f0 !important; text-align: center; }
+
+        .ref-id-input { font-family: monospace; letter-spacing: 1px; color: #666 !important; font-weight: bold; background-color: #f0f0f0 !important; text-align: center; }
+
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 8px; padding: 12px 30px; font-weight: 600; font-size: 1.1rem; width: 100%; }
         .info-text { font-size: 0.85rem; color: #6c757d; margin-top: 5px; font-style: italic; }
         .last-value-hint { font-size: 0.75rem; color: #28a745; margin-top: 3px; font-weight: 600; }
         #loading { display: none; text-align: center; padding: 20px; }
         .spinner-border { width: 3rem; height: 3rem; }
-        #debug-log { background: #111; color: #0f0; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; max-height: 150px; overflow-y: auto; margin-bottom: 15px; display: none; }
+        
+        /* Debug Log */
+        #debug-log {
+            background: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        #debug-log div { margin: 2px 0; }
+        .log-error { color: #f00; }
+        .log-success { color: #0f0; }
+        .log-warn { color: #ff0; }
+        .log-info { color: #0dd; }
     </style>
 </head>
 <body>
@@ -33,210 +56,465 @@
         <div class="card">
             <div class="card-header text-center">
                 <h1>🔬 Dr. Coolant</h1>
-                <p class="mb-0">切削液智能診斷系統 v12.5</p>
+                <p class="mb-0">切削液智能診斷系統 v12.5-DIFY-Compatible</p>
             </div>
+            
             <div class="card-body">
                 <div id="debug-log"></div>
+                
                 <div id="alert-container"></div>
-                <div id="loading"><div class="spinner-border text-primary"></div><p class="mt-3">讀取設定中...</p></div>
+                <div id="loading">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3">正在同步機台設定...</p>
+                </div>
                 
                 <form id="diagnostic-form">
-                    <div class="mb-3"><label class="form-label">診斷單號</label><input type="text" class="form-control locked-input ref-id-input" id="ref-id" readonly></div>
-                    <div class="mb-3"><label class="form-label">機台編號 <span style="color:red">*</span></label><input type="text" class="form-control locked-input" id="machine-id" readonly required></div>
-                    <div class="row mb-3">
-                        <div class="col-6"><label class="form-label">機台名稱</label><input type="text" class="form-control locked-input" id="machine-name" readonly></div>
-                        <div class="col-6"><label class="form-label">負責廠商</label><input type="text" class="form-control locked-input" id="vendor-code" readonly></div>
+                    <div class="mb-3">
+                        <label class="form-label">診斷單號</label>
+                        <input type="text" class="form-control locked-input ref-id-input" id="ref-id" readonly>
                     </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">機台編號 <span style="color:red">*</span></label>
+                        <input type="text" class="form-control locked-input" id="machine-id" readonly required>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">機台名稱</label>
+                            <input type="text" class="form-control locked-input" id="machine-name" readonly>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">負責廠商</label>
+                            <input type="text" class="form-control locked-input" id="vendor-code" readonly>
+                        </div>
+                    </div>
+
                     <div class="mb-3">
                         <label class="form-label">切削液種類 <span style="color:red">*</span></label>
-                        <select id="oil-type" class="form-select" required onchange="updateUI()">
-                            <option value="">請選擇</option>
-                            <option value="選項 1">選項 1：全合成</option>
-                            <option value="選項 2">選項 2：半合成</option>
+                        <select id="oil-type" class="form-select" required>
+                            <option value="">請選擇切削液種類</option>
+                            <option value="選項 1">選項 1：全合成 (Fully Synthetic)</option>
+                            <option value="選項 2">選項 2：半合成 (Semi-Synthetic)</option>
                         </select>
                     </div>
+
                     <div class="mb-3">
                         <label class="form-label">pH 值 <span style="color:red">*</span></label>
-                        <input type="number" id="ph-value" class="form-control" step="0.1" placeholder="9.0" required>
-                        <div id="ph-hint" class="info-text">正常範圍：8.5-9.5</div>
+                        <input type="number" id="ph-value" class="form-control" step="0.1" placeholder="例如：9.2" required>
+                        <div id="ph-hint" class="info-text">正常範圍：8.5 - 9.5</div>
                         <div id="ph-last-value" class="last-value-hint"></div>
                     </div>
+
                     <div class="mb-3">
                         <label class="form-label">Brix 讀數 (%) <span style="color:red">*</span></label>
-                        <input type="number" id="brix-reading" class="form-control" step="0.1" placeholder="3.5" required>
-                        <div id="conc-hint" class="info-text">正常範圍：3.0-5.0%</div>
+                        <input type="number" id="brix-reading" class="form-control" step="0.1" placeholder="例如：3.5" required>
+                        <div id="conc-hint" class="info-text">正常範圍：3.0 - 5.0%</div>
                         <div id="brix-last-value" class="last-value-hint"></div>
                     </div>
-                    <div class="mb-3"><label class="form-label">槽體容量 (L) <span style="color:red">*</span></label><input type="number" id="tank-size" class="form-control" step="1" required></div>
+
+                    <div class="mb-3">
+                        <label class="form-label">槽體容量 (L) <span style="color:red">*</span></label>
+                        <input type="number" id="tank-size" class="form-control" step="1" placeholder="例如：200" required>
+                    </div>
+
                     <hr class="my-4">
-                    <div class="mb-3"><label class="form-label">雙氧水測試</label><select id="bubble-result" class="form-select"><option value="請選擇">請選擇</option><option value="選項 1：無氣泡">選項 1：無氣泡</option><option value="選項 2：少量氣泡">選項 2：少量氣泡</option><option value="選項 3：持續冒泡">選項 3：持續冒泡</option><option value="選項 4：大量氣泡">選項 4：大量氣泡</option></select></div>
-                    <div class="mb-3"><label class="form-label">細菌顯影</label><select id="resazurin-color" class="form-select"><option value="請選擇">請選擇</option><option value="選項 1：藍色">選項 1：藍色</option><option value="選項 2：紫色">選項 2：紫色</option><option value="選項 3：粉紅色">選項 3：粉紅色</option><option value="選項 4：透明">選項 4：透明</option></select></div>
-                    <div class="mb-3"><label class="form-label">電導度 (μS/cm)</label><input type="number" id="conductivity" class="form-control" step="1" placeholder="3000"></div>
-                    <div class="mb-3"><label class="form-label">目標濃度 (%)</label><input type="number" id="target-conc" class="form-control" step="0.1" placeholder="5.0"></div>
-                    <div class="mb-3"><label class="form-label">觀察症狀</label><textarea id="symptoms" class="form-control" rows="2"></textarea></div>
+
+                    <div class="mb-3">
+                        <label class="form-label">💧 雙氧水氣泡測試</label>
+                        <select id="bubble-result" class="form-select">
+                            <option value="">未檢測</option>
+                            <option value="選項 1：無氣泡/微量氣泡（Level 1 - 安全）">選項 1：無氣泡/微量氣泡（Level 1 - 安全）</option>
+                            <option value="選項 2：少量氣泡（浮水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡（浮水狀）（Level 2 - 輕微感染）</option>
+                            <option value="選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）">選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）</option>
+                            <option value="選項 4：大量氣泡（酒精泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡（酒精泡沫狀）（Level 4 - 嚴重感染）</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">🧪 Dr. Coolant 細菌顯影</label>
+                        <select id="resazurin-color" class="form-select">
+                            <option value="">未檢測</option>
+                            <option value="選項 1：🔵 藍色（Level 1 - 安全）">選項 1：🔵 藍色（Level 1 - 安全）</option>
+                            <option value="選項 2：🟣 紫色（Level 2 - 輕微感染）">選項 2：🟣 紫色（Level 2 - 輕微感染）</option>
+                            <option value="選項 3：🌸 粉紅色（Level 3 - 中度感染）">選項 3：🌸 粉紅色（Level 3 - 中度感染）</option>
+                            <option value="選項 4：⚪ 無色透明（Level 4 - 嚴重感染）">選項 4：⚪ 無色透明（Level 4 - 嚴重感染）</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">電導度 (μS/cm)</label>
+                        <input type="number" id="conductivity" class="form-control" step="1" placeholder="選填">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">目標濃度 (%)</label>
+                        <input type="number" id="target-conc" class="form-control" step="0.1" placeholder="選填">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">觀察症狀</label>
+                        <textarea id="symptoms" class="form-control" rows="2" placeholder="選填"></textarea>
+                    </div>
+
                     <button type="submit" class="btn btn-primary mt-3">🚀 提交診斷</button>
                 </form>
             </div>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
     <script>
-        const CFG = {
-            LIFF: '2008738088-3ae3t9Qw',
-            HOOK: 'https://eo9xer4x4f4gjfi.m.pipedream.net/',
-            SB_URL: 'https://zqufrfytzfgpargbzdlk.supabase.co',
-            SB_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI'
-        };
-        
-        let appSupabase = null; // 全新變數名稱
+        const LIFF_ID = '2008738088-3ae3t9Qw';
+        const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
+        const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
 
-        function log(msg) {
-            console.log(msg);
-            const d = document.getElementById('debug-log');
-            d.style.display = 'block';
-            d.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        let sb = null;
+
+        function log(msg, type = 'info') {
+            const div = document.getElementById('debug-log');
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = `log-${type}`;
+            line.textContent = `[${time}] ${msg}`;
+            div.appendChild(line);
+            div.scrollTop = div.scrollHeight;
+            console.log(`[${time}] ${msg}`);
         }
 
-        function alertMsg(msg, type) {
-            document.getElementById('alert-container').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+        function showAlert(msg, type) {
+            document.getElementById('alert-container').innerHTML = 
+                `<div class="alert alert-${type} alert-dismissible fade show">
+                    ${msg}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>`;
         }
 
-        function updateUI() {
-            document.querySelectorAll('.form-control, .form-select').forEach(el => {
-                if(el.value && el.value !== '請選擇') el.classList.add('is-filled');
-                else el.classList.remove('is-filled');
-            });
-            const oil = document.getElementById('oil-type').value;
-            const ph = document.getElementById('ph-hint');
-            const bx = document.getElementById('conc-hint');
-            if(oil.includes('1')) { ph.innerText='8.5-9.5'; bx.innerText='4.0-6.0%'; }
-            else if(oil.includes('2')) { ph.innerText='8.8-9.5'; bx.innerText='6.0-8.0%'; }
-        }
-
-        async function initApp() {
-            // 1. 單號
+        function generateRefId() {
             const now = new Date();
-            document.getElementById('ref-id').value = `LOG-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            return `LOG-${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+        }
 
-            // 2. DB 連線
-            if(window.supabase) appSupabase = window.supabase.createClient(CFG.SB_URL, CFG.SB_KEY);
+        function markFilled(el) {
+            if (el && el.value && el.value.trim() !== '' && el.value !== '請選擇' && el.value !== '') {
+                el.classList.add('is-filled');
+            }
+        }
 
-            // 3. 取得 ID
-            const params = new URLSearchParams(window.location.search);
-            let mid = params.get('machine_id');
-            if(!mid && liff.getContext()) {
-                const url = liff.getContext().endpointUrl;
-                if(url && url.includes('?')) mid = new URLSearchParams(url.split('?')[1]).get('machine_id');
+        function updateHints() {
+            const oil = document.getElementById('oil-type');
+            markFilled(oil);
+            const val = oil.value;
+            const ph = document.getElementById('ph-hint');
+            const brix = document.getElementById('conc-hint');
+            
+            if (val === '選項 1') {
+                ph.textContent = '正常範圍：8.5 - 9.5';
+                brix.textContent = '正常範圍：4.0 - 6.0%';
+            } else if (val === '選項 2') {
+                ph.textContent = '正常範圍：8.8 - 9.5';
+                brix.textContent = '正常範圍：6.0 - 8.0%';
+            }
+        }
+
+        async function initSupabase() {
+            return new Promise((resolve) => {
+                const check = () => {
+                    if (typeof window.supabase !== 'undefined') {
+                        sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                        log('✅ Supabase 初始化成功', 'success');
+                        resolve(true);
+                    } else {
+                        log('⏳ 等待 Supabase SDK...', 'warn');
+                        setTimeout(check, 300);
+                    }
+                };
+                check();
+            });
+        }
+
+        async function loadData(id) {
+            if (!sb) {
+                log('❌ Supabase 未初始化', 'error');
+                return null;
+            }
+            
+            log(`🔍 查詢機台: ${id}`, 'info');
+            
+            try {
+                const { data, error } = await sb
+                    .from('machines')
+                    .select('*')
+                    .eq('machine_id', id)
+                    .single();
+
+                if (error) {
+                    log(`❌ 查詢錯誤: ${error.message}`, 'error');
+                    return null;
+                }
+                
+                if (!data) {
+                    log('❌ 找不到資料', 'error');
+                    return null;
+                }
+                
+                log('✅ 查詢成功', 'success');
+                log(`  machine_name: ${data.machine_name}`, 'info');
+                log(`  vendor: ${data.vendor}`, 'info');
+                log(`  capacity: ${data.capacity}`, 'info');
+                log(`  target_conc: ${data.target_conc}`, 'info');
+                log(`  oil_code: ${data.oil_code}`, 'info');
+                
+                return data;
+            } catch (e) {
+                log(`❌ 例外: ${e.message}`, 'error');
+                return null;
+            }
+        }
+
+        function fillForm(data) {
+            log('📝 開始填入表單', 'info');
+            
+            const set = (id, val, name) => {
+                const el = document.getElementById(id);
+                if (el && val != null && val !== '') {
+                    el.value = val;
+                    markFilled(el);
+                    log(`  ✓ ${name}: ${val}`, 'success');
+                } else {
+                    log(`  - ${name}: 無資料`, 'warn');
+                }
+            };
+
+            set('machine-name', data.machine_name, '機台名稱');
+            set('vendor-code', data.vendor, '負責廠商');
+            set('tank-size', data.capacity, '槽體容量');
+            set('target-conc', data.target_conc, '目標濃度');
+
+            // 油品類型
+            if (data.oil_code) {
+                const oil = document.getElementById('oil-type');
+                const code = String(data.oil_code).trim();
+                
+                if (code === '1') {
+                    oil.value = '選項 1';
+                    log('  ✓ 油品: 選項 1', 'success');
+                } else if (code === '2') {
+                    oil.value = '選項 2';
+                    log('  ✓ 油品: 選項 2', 'success');
+                }
+                
+                markFilled(oil);
+                updateHints();
             }
 
-            if(!mid) {
-                alertMsg('⚠️ 請掃描 QR Code', 'warning');
-                document.getElementById('loading').style.display='none';
+            // 上次檢測值
+            if (data.last_ph) {
+                document.getElementById('ph-last-value').textContent = `💡 上次：pH ${data.last_ph}`;
+                log(`  💡 last_ph: ${data.last_ph}`, 'info');
+            }
+            if (data.last_brix) {
+                document.getElementById('brix-last-value').textContent = `💡 上次：${data.last_brix}%`;
+                log(`  💡 last_brix: ${data.last_brix}`, 'info');
+            }
+            
+            log('✅ 表單填入完成', 'success');
+        }
+
+        async function init() {
+            log('🚀 開始初始化', 'info');
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('diagnostic-form').style.display = 'none';
+            
+            const refId = generateRefId();
+            document.getElementById('ref-id').value = refId;
+            log(`🆔 產生單號: ${refId}`, 'info');
+
+            await initSupabase();
+            
+            const params = new URLSearchParams(window.location.search);
+            let mid = params.get('machine_id');
+            log(`📥 URL machine_id: ${mid || '(無)'}`, 'info');
+
+            if (!mid) {
+                try {
+                    const ctx = liff.getContext();
+                    if (ctx && ctx.endpointUrl) {
+                        const url = new URL(ctx.endpointUrl);
+                        mid = url.searchParams.get('machine_id');
+                        log(`📥 LIFF machine_id: ${mid || '(無)'}`, 'info');
+                    }
+                } catch (e) {
+                    log(`⚠️ LIFF Context 失敗`, 'warn');
+                }
+            }
+
+            if (!mid) {
+                log('⚠️ 無 machine_id', 'warn');
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('diagnostic-form').style.display = 'block';
+                showAlert('⚠️ 未偵測到機台編號，請手動輸入', 'warning');
                 return;
             }
 
             document.getElementById('machine-id').value = mid;
+            markFilled(document.getElementById('machine-id'));
 
-            // 4. 讀取資料 (包含上次記憶的容量與濃度)
-            if(appSupabase) {
-                const { data, error } = await appSupabase.from('machines').select('*').eq('machine_id', mid).single();
-                if(data) {
-                    const set = (id, v) => { if(v) document.getElementById(id).value = v; };
-                    set('machine-name', data.machine_name);
-                    set('vendor-code', data.vendor);
-                    set('tank-size', data.capacity);      // ✅ 讀取記憶容量
-                    set('target-conc', data.target_conc); // ✅ 讀取記憶濃度
-                    
-                    if(data.oil_code) {
-                        const oc = String(data.oil_code);
-                        const sel = document.getElementById('oil-type');
-                        if(oc.includes('1')) sel.value='選項 1';
-                        else if(oc.includes('2')) sel.value='選項 2';
-                    }
-                    if(data.last_ph) document.getElementById('ph-last-value').innerText = `上次: ${data.last_ph}`;
-                    if(data.last_brix) document.getElementById('brix-last-value').innerText = `上次: ${data.last_brix}%`;
-                    log('✅ 設定已載入');
-                }
+            const data = await loadData(mid);
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('diagnostic-form').style.display = 'block';
+            
+            if (data) {
+                fillForm(data);
+                showAlert('✅ 機台資料已同步', 'success');
+            } else {
+                log('❌ 無法載入機台資料', 'error');
+                showAlert('⚠️ 無法載入機台資料', 'warning');
             }
-            updateUI();
-            document.getElementById('loading').style.display='none';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('input, select').forEach(el => el.addEventListener('change', updateUI));
-            liff.init({ liffId: CFG.LIFF }).then(() => {
-                if(!liff.isLoggedIn()) liff.login();
-                else initApp();
-            }).catch(e => initApp());
+            log('🌐 頁面載入完成', 'info');
+            
+            document.querySelectorAll('.form-control, .form-select').forEach(el => {
+                el.addEventListener('input', () => markFilled(el));
+                el.addEventListener('change', () => markFilled(el));
+            });
+
+            document.getElementById('oil-type').addEventListener('change', updateHints);
+
+            log('🔐 初始化 LIFF', 'info');
+            liff.init({ liffId: LIFF_ID })
+                .then(() => {
+                    log('✅ LIFF 成功', 'success');
+                    if (!liff.isLoggedIn()) {
+                        log('⚠️ 未登入，導向登入頁', 'warn');
+                        liff.login();
+                    } else {
+                        log('✅ 已登入', 'success');
+                        init();
+                    }
+                })
+                .catch(err => {
+                    log(`❌ LIFF 失敗: ${err.message}`, 'error');
+                    init();
+                });
         });
 
         document.getElementById('diagnostic-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            document.getElementById('loading').style.display='block';
-            document.getElementById('diagnostic-form').style.display='none';
+            log('📤 開始提交表單', 'info');
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('diagnostic-form').style.display = 'none';
 
             try {
                 let profile = {};
-                try { profile = await liff.getProfile(); } catch(e) {}
+                try {
+                    profile = await liff.getProfile();
+                    log(`👤 ${profile.displayName}`, 'info');
+                } catch (e) {
+                    log('⚠️ 無 Profile', 'warn');
+                }
 
-                // 🔥 強力防呆：轉數字，失敗給 0 (解決 Dify 400)
-                const parse = (id) => {
-                    const v = parseFloat(document.getElementById(id).value);
-                    return isNaN(v) ? 0 : v;
-                };
+                const machineId = document.getElementById('machine-id').value;
+                const tankSize = parseFloat(document.getElementById('tank-size').value) || 0;
+                const targetConc = parseFloat(document.getElementById('target-conc').value) || 0;
+                const oilType = document.getElementById('oil-type').value;
+                const oilCode = oilType === '選項 1' ? '1' : '2';
+                const phValue = parseFloat(document.getElementById('ph-value').value) || 0;
+                const brixReading = parseFloat(document.getElementById('brix-reading').value) || 0;
+                
+                // 取得選項值（Dify 格式）
+                const bubbleResult = document.getElementById('bubble-result').value || '未檢測';
+                const resazurinColor = document.getElementById('resazurin-color').value || '未檢測';
 
-                const mid = document.getElementById('machine-id').value;
-                const tank = parse('tank-size');
-                const target = parse('target-conc');
-                const oilVal = document.getElementById('oil-type').value;
-                const oilCode = oilVal.includes('1') ? 1 : 2;
-
-                const payload = {
+                const formData = {
                     ref_id: document.getElementById('ref-id').value,
                     userId: profile.userId || 'Guest',
                     displayName: profile.displayName || 'User',
-                    machine_id: mid,
-                    oil_type: oilVal,
-                    ph_value: parse('ph-value'),
-                    brix_reading: parse('brix-reading'),
-                    tank_size: tank,
-                    target_conc: target,
-                    bubble_result: document.getElementById('bubble-result').value,
-                    resazurin_color: document.getElementById('resazurin-color').value,
-                    conductivity: parse('conductivity'),
-                    symptoms: document.getElementById('symptoms').value
+                    machine_id: machineId,
+                    machine_name: document.getElementById('machine-name').value || '',
+                    vendor: document.getElementById('vendor-code').value || '',
+                    oil_type: oilType,
+                    ph_value: phValue,
+                    brix_reading: brixReading,
+                    tank_size: tankSize,
+                    target_conc: targetConc,
+                    bubble_result: bubbleResult,
+                    resazurin_color: resazurinColor,
+                    conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
+                    symptoms: document.getElementById('symptoms').value || ''
                 };
 
-                // 1. 記憶設定 (更新資料庫)
-                if(appSupabase) {
-                    await appSupabase.from('machines').update({
-                        capacity: tank,
-                        target_conc: target,
-                        oil_code: oilCode,
-                        last_ph: payload.ph_value,
-                        last_brix: payload.brix_reading,
-                        last_checked: new Date().toISOString()
-                    }).eq('machine_id', mid);
+                log(`📦 bubble_result: ${bubbleResult}`, 'info');
+                log(`📦 resazurin_color: ${resazurinColor}`, 'info');
+
+                // 更新資料庫
+                if (sb) {
+                    log('💾 更新資料庫...', 'info');
+                    try {
+                        const { error } = await sb
+                            .from('machines')
+                            .update({
+                                capacity: tankSize,
+                                target_conc: targetConc,
+                                oil_code: oilCode,
+                                last_ph: phValue,
+                                last_brix: brixReading,
+                                last_checked: new Date().toISOString()
+                            })
+                            .eq('machine_id', machineId);
+
+                        if (error) {
+                            log(`⚠️ 資料庫更新失敗: ${error.message}`, 'warn');
+                        } else {
+                            log('✅ 資料庫已更新', 'success');
+                        }
+                    } catch (err) {
+                        log(`❌ 資料庫更新例外: ${err.message}`, 'error');
+                    }
                 }
 
-                // 2. 送出 Webhook
-                const res = await fetch(CFG.HOOK, {
+                // 傳送 Webhook
+                log('📡 傳送 Webhook...', 'info');
+                const res = await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(formData)
                 });
 
-                if(res.ok) {
-                    alertMsg('✅ 診斷成功！設定已保存', 'success');
-                    setTimeout(() => liff.closeWindow(), 2000);
+                log(`📡 Webhook 回應: HTTP ${res.status}`, res.ok ? 'success' : 'error');
+
+                if (res.ok) {
+                    log('✅ 提交成功', 'success');
+                    showAlert('✅ 診斷完成！設定已保存', 'success');
+                    
+                    setTimeout(() => {
+                        if (liff.isInClient()) {
+                            log('🚪 關閉 LIFF 視窗', 'info');
+                            liff.closeWindow();
+                        }
+                    }, 3000);
                 } else {
-                    throw new Error('Server 400');
+                    throw new Error(`HTTP ${res.status}`);
                 }
-            } catch(err) {
-                alertMsg('❌ 提交失敗，請檢查網路', 'danger');
-                log(err.message);
-                document.getElementById('loading').style.display='none';
-                document.getElementById('diagnostic-form').style.display='block';
+
+            } catch (err) {
+                log(`❌ 提交失敗: ${err.message}`, 'error');
+                showAlert('❌ 提交失敗，請重試', 'danger');
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('diagnostic-form').style.display = 'block';
             }
         });
     </script>
