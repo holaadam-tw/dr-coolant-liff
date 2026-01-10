@@ -26,7 +26,7 @@
         .locked-input {
             background-color: #e9ecef !important;
             cursor: not-allowed;
-            pointer-events: none; /* 防止點擊 */
+            pointer-events: none;
         }
 
         /* 🖊️ 藍色粗體：只要有值 (is-filled)，就強制變色 */
@@ -162,15 +162,17 @@
         // ===== 配置區 =====
         const LIFF_ID = '2008738088-3ae3t9Qw';
         const WEBHOOK_URL = 'https://eo9xer4x4f4gjfi.m.pipedream.net/';
+        // ✅ Supabase 配置 (使用您提供的正確 JWT Key)
         const SUPABASE_URL = 'https://zqufrfytzfgpargbzdlk.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI';
 
-        // 🚨 變數名稱改為 supabaseClient 避免衝突
+        // 🚨 重要修正：使用 supabaseClient 避免與重複宣告的 supabase 衝突
         let supabaseClient = null;
 
         // ===== 初始化 Supabase =====
         try {
             if (window.supabase) {
+                // 使用 window.supabase.createClient 初始化
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
                 console.log('✅ Supabase Client 初始化成功');
             } else {
@@ -195,7 +197,7 @@
             const phHint = document.getElementById('ph-hint');
             const concHint = document.getElementById('conc-hint');
             
-            checkInputColor(oilType); // 確保選單變色
+            checkInputColor(oilType);
 
             const val = oilType.value;
             if (val.includes("選項 1") || val === "1") {
@@ -207,10 +209,14 @@
             }
         }
 
-        // ===== 資料讀取 =====
+        // ===== 資料讀取 (使用 supabaseClient) =====
         async function loadMachineData(machineId) {
-            if (!supabaseClient) return null;
+            if (!supabaseClient) {
+                console.warn('Supabase 未初始化');
+                return null;
+            }
             try {
+                // 直接查詢 machines 表格
                 const { data, error } = await supabaseClient
                     .from('machines')
                     .select('*')
@@ -230,11 +236,10 @@
 
         // ===== 主邏輯 =====
         async function initFormLogic() {
-            // 抓取 URL 參數
             const urlParams = new URLSearchParams(window.location.search);
             let machineId = urlParams.get('machine_id');
 
-            // LIFF 備援
+            // LIFF Context 備援
             if (!machineId && liff.getContext()) {
                 const contextUrl = liff.getContext().endpointUrl;
                 if (contextUrl && contextUrl.includes('?')) {
@@ -244,12 +249,11 @@
             }
 
             if (!machineId) {
-                // 如果沒有 ID，不做任何事，等待使用者手動輸入或重掃
                 console.log('無 Machine ID');
                 return;
             }
 
-            // 填入 ID 並鎖定
+            // 填入 ID 並變色
             const idInput = document.getElementById('machine-id');
             idInput.value = machineId;
             checkInputColor(idInput);
@@ -257,7 +261,6 @@
             // 讀取資料
             const data = await loadMachineData(machineId);
             if (data) {
-                // 填入並變色 (Helper 函式)
                 const fill = (id, val) => {
                     const el = document.getElementById(id);
                     if (el && val != null) {
@@ -268,10 +271,10 @@
 
                 fill('machine-name', data.machine_name);
                 fill('vendor-code', data.vendor);
-                fill('tank-size', data.capacity);     // 容量 (可修改)
-                fill('target-conc', data.target_conc); // 濃度 (可修改)
+                fill('tank-size', data.capacity);      // 可修改
+                fill('target-conc', data.target_conc); // 可修改
 
-                // 處理油品代碼 (轉字串比對)
+                // 處理油品代碼
                 if (data.oil_code) {
                     const el = document.getElementById('oil-type');
                     let code = String(data.oil_code).trim();
@@ -281,7 +284,6 @@
                     updateRangeHints();
                 }
 
-                // 上次紀錄
                 if (data.last_brix) document.getElementById('brix-last-value').innerText = `💡 上次：${data.last_brix}%`;
                 if (data.last_ph) document.getElementById('ph-last-value').innerText = `💡 上次：pH ${data.last_ph}`;
                 
@@ -289,21 +291,19 @@
             }
         }
 
-        // ===== 監聽器與初始化 =====
+        // ===== 啟動 LIFF =====
         document.addEventListener('DOMContentLoaded', () => {
-            // 綁定所有輸入框變色事件
             document.querySelectorAll('.form-control, .form-select').forEach(input => {
                 input.addEventListener('input', () => checkInputColor(input));
                 input.addEventListener('change', () => checkInputColor(input));
             });
 
-            // 初始化 LIFF
             liff.init({ liffId: LIFF_ID }).then(() => {
                 if (!liff.isLoggedIn()) liff.login();
                 else initFormLogic();
             }).catch(err => {
                 console.error(err);
-                // 即使 LIFF 失敗也嘗試跑網頁邏輯
+                // 即使 LIFF 失敗也嘗試執行 (方便電腦版測試)
                 initFormLogic();
             });
         });
@@ -318,7 +318,6 @@
                 let profile = {};
                 try { profile = await liff.getProfile(); } catch (e) {}
 
-                // 蒐集資料 (包含使用者修改過的值)
                 const formData = {
                     userId: profile.userId || 'Guest',
                     displayName: profile.displayName || 'User',
@@ -333,8 +332,6 @@
                     conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
                     symptoms: document.getElementById('symptoms').value
                 };
-
-                console.log('送出資料:', formData);
 
                 const res = await fetch(WEBHOOK_URL, {
                     method: 'POST',
