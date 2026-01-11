@@ -1,178 +1,1535 @@
-"""
-Dr. Coolant v15.3 ULTIMATE - Pipedream Webhook
-支援 v15.2 的 company_name/vendor_name 欄位與動態角色邏輯
-"""
-import requests
-from datetime import datetime
-
-def handler(pd: "pipedream"):
-    # ============================================================
-    # 🔧 設定區（請替換為實際值）
-    # ============================================================
-    SUPABASE_URL = "https://zqufrfytzfgpargbzdlk.supabase.co"
-    SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI"
-    
-    # Dify 工作流設定
-    DIFY_API_KEY = "[請替換為您的 Dify API Key]"
-    DIFY_WORKFLOW_URL = "https://api.dify.ai/v1/workflows/run"
-    
-    # LINE Notify Token（選填，用於緊急通知）
-    LINE_NOTIFY_TOKEN = "[選填]"
-    
-    # ============================================================
-    # 1️⃣ 解析前端送來的資料
-    # ============================================================
-    try:
-        payload = pd.steps["trigger"]["event"]["body"]
-        print(f"✅ 收到資料: {payload}")
-    except Exception as e:
-        return {"error": f"解析請求失敗: {str(e)}"}
-    
-    # 取得關鍵欄位
-    user_id = payload.get("userId")
-    real_name = payload.get("realName")
-    company_name = payload.get("companyName")  # v15.2 新增
-    vendor_name = payload.get("vendorName")    # v15.2 新增
-    is_internal = payload.get("isInternal", True)  # v15.2 新增
-    role = payload.get("role")
-    machine_id = payload.get("machineId")
-    
-    # 檢測數據
-    ph_value = payload.get("phValue")
-    brix = payload.get("brix")
-    conductivity = payload.get("conductivity")
-    bubble_result = payload.get("bubbleResult")
-    resazurin_color = payload.get("resazurinColor")
-    symptoms = payload.get("symptoms")
-    
-    # ============================================================
-    # 2️⃣ 從 Supabase 取得使用者與機台資訊
-    # ============================================================
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    # 取得使用者完整資料
-    try:
-        user_response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/users?user_id=eq.{user_id}",
-            headers=headers
-        )
-        user_data = user_response.json()[0] if user_response.ok and user_response.json() else {}
-        print(f"✅ 使用者資料: {user_data}")
-    except Exception as e:
-        print(f"⚠️ 無法取得使用者資料: {e}")
-        user_data = {}
-    
-    # 取得機台資料
-    try:
-        machine_response = requests.get(
-            f"{SUPABASE_URL}/rest/v1/machines?machine_id=eq.{machine_id}",
-            headers=headers
-        )
-        machine_data = machine_response.json()[0] if machine_response.ok and machine_response.json() else {}
-        print(f"✅ 機台資料: {machine_data}")
-    except Exception as e:
-        print(f"⚠️ 無法取得機台資料: {e}")
-        machine_data = {}
-    
-    # ============================================================
-    # 3️⃣ 寫入 daily_logs 表
-    # ============================================================
-    log_entry = {
-        "machine_id": machine_id,
-        "company_name": company_name or machine_data.get("company_name"),
-        "vendor_name": vendor_name or machine_data.get("vendor"),
-        "operator_id": user_id,
-        "operator_name": real_name or user_data.get("real_name"),
-        "operator_role": role or user_data.get("role"),
-        "operator_company": company_name if is_internal else vendor_name,
-        "ph_value": float(ph_value) if ph_value else None,
-        "brix": float(brix) if brix else None,
-        "conductivity": float(conductivity) if conductivity else None,
-        "bubble_result": bubble_result,
-        "resazurin_color": resazurin_color,
-        "symptoms": symptoms,
-        "created_at": datetime.utcnow().isoformat()
-    }
-    
-    try:
-        log_response = requests.post(
-            f"{SUPABASE_URL}/rest/v1/daily_logs",
-            json=log_entry,
-            headers=headers
-        )
-        if log_response.ok:
-            print(f"✅ 成功寫入 daily_logs: {log_response.json()}")
-        else:
-            print(f"❌ 寫入 daily_logs 失敗: {log_response.status_code} - {log_response.text}")
-            return {"error": "資料庫寫入失敗", "details": log_response.text}
-    except Exception as e:
-        print(f"❌ daily_logs 寫入異常: {e}")
-        return {"error": f"資料庫異常: {str(e)}"}
-    
-    # ============================================================
-    # 4️⃣ 呼叫 Dify 工作流生成報告
-    # ============================================================
-    dify_payload = {
-        "inputs": {
-            "machine_id": machine_id,
-            "machine_name": machine_data.get("machine_name", "未知機台"),
-            "company_name": company_name or machine_data.get("company_name"),
-            "vendor_name": vendor_name or machine_data.get("vendor"),
-            "operator_name": real_name,
-            "operator_role": role,
-            "ph_value": ph_value,
-            "brix": brix,
-            "conductivity": conductivity,
-            "bubble_result": bubble_result,
-            "resazurin_color": resazurin_color,
-            "symptoms": symptoms,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        },
-        "response_mode": "blocking",
-        "user": user_id
-    }
-    
-    dify_headers = {
-        "Authorization": f"Bearer {DIFY_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    try:
-        dify_response = requests.post(
-            DIFY_WORKFLOW_URL,
-            json=dify_payload,
-            headers=dify_headers,
-            timeout=30
-        )
-        
-        if dify_response.ok:
-            dify_result = dify_response.json()
-            print(f"✅ Dify 報告生成成功: {dify_result.get('data', {}).get('outputs', {})}")
-            report = dify_result.get("data", {}).get("outputs", {}).get("report", "報告生成中...")
-        else:
-            print(f"⚠️ Dify 呼叫失敗: {dify_response.status_code} - {dify_response.text}")
-            report = f"⚠️ AI 報告生成失敗（{dify_response.status_code}）"
-    except Exception as e:
-        print(f"❌ Dify 呼叫異常: {e}")
-        report = f"❌ AI 報告異常: {str(e)}"
-    
-    # ============================================================
-    # 5️⃣ 返回結果給前端
-    # ============================================================
-    return {
-        "success": True,
-        "message": "✅ 檢測資料已成功記錄！",
-        "data": {
-            "log_id": log_response.json()[0].get("id") if log_response.ok else None,
-            "machine_id": machine_id,
-            "operator": real_name,
-            "company": company_name if is_internal else vendor_name,
-            "role": role,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "ai_report": report
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr. Coolant 切削液檢測</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <!-- ⭐ v15.3: 新增 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-    }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px 20px;
+        }
+
+        /* ⭐ v15.3: 圖表按鈕 */
+        .chart-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+
+        .chart-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.3);
+        }
+
+        /* ⭐ v15.3: Modal 樣式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            animation: fadeIn 0.3s;
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s;
+            position: relative;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            line-height: 30px;
+            text-align: center;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e1e8ed;
+        }
+
+        /* 註冊表單樣式 */
+        .register-form {
+            display: none;
+        }
+
+        .register-form.active {
+            display: block;
+        }
+
+        .welcome-message {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .welcome-message h2 {
+            color: #667eea;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .welcome-message p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* 身份選擇卡片 */
+        .identity-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .identity-card {
+            background: #f8f9fa;
+            border: 3px solid #e1e8ed;
+            border-radius: 12px;
+            padding: 20px 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .identity-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .identity-card.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .identity-card .icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .identity-card .title {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+
+        .identity-card .desc {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* 動態表單區塊 */
+        .dynamic-form {
+            display: none;
+        }
+
+        .dynamic-form.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        /* 檢測表單樣式 */
+        .inspection-form {
+            display: none;
+        }
+
+        .inspection-form.active {
+            display: block;
+        }
+
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .user-info p {
+            margin: 5px 0;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .user-info strong {
+            color: #667eea;
+        }
+
+        .user-info.vendor {
+            border-left-color: #fd7e14;
+        }
+
+        .user-info.vendor strong {
+            color: #fd7e14;
+        }
+
+        /* 機台資料同步提示 */
+        .sync-status {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid #c3e6cb;
+            display: none;
+        }
+
+        .sync-status.show {
+            display: block;
+        }
+
+        /* 🆕 可編輯欄位提示 */
+        .editable-hint {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            text-align: center;
+            border: 2px solid #ffeaa7;
+            display: none;
+        }
+
+        .editable-hint.show {
+            display: block;
+        }
+
+        /* 表單組件 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .required {
+            color: #e74c3c;
+            margin-left: 4px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group input::placeholder,
+        .form-group textarea::placeholder {
+            color: #aaa;
+        }
+
+        .locked-input {
+            background-color: #e9ecef !important;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* 🆕 可編輯但有歷史值的欄位樣式 */
+        .editable-with-history {
+            background-color: #fff9e6 !important;
+            border-color: #ffc107 !important;
+        }
+
+        .form-control.is-filled,
+        .form-select.is-filled {
+            color: #0d6efd !important;
+            font-weight: 700 !important;
+            border-color: #0d6efd !important;
+            background-color: #f8f9fa !important;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .last-value-hint {
+            font-size: 0.75rem;
+            color: #28a745;
+            margin-top: 3px;
+            font-weight: 600;
+        }
+
+        /* 🆕 可修改提示 */
+        .editable-label {
+            font-size: 0.7rem;
+            color: #ff9800;
+            margin-top: 3px;
+            font-weight: 600;
+        }
+
+        /* 按鈕 */
+        .btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Loading 動畫 */
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .loading.hidden {
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 錯誤訊息 */
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        /* 成功訊息 */
+        .success-message {
+            background: #efe;
+            color: #3c3;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .success-message.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔬 Dr. Coolant</h1>
+            <p>切削液智能檢測系統 v15.3 ULTIMATE</p>
+        </div>
+
+        <div class="content">
+            <!-- Loading 畫面 -->
+            <div class="loading active" id="loadingScreen">
+                <div class="spinner"></div>
+                <p id="loadingText">正在載入...</p>
+            </div>
+
+            <!-- 錯誤訊息 -->
+            <div class="error-message" id="errorMessage"></div>
+
+            <!-- 成功訊息 -->
+            <div class="success-message" id="successMessage"></div>
+
+            <!-- 機台資料同步提示 -->
+            <div class="sync-status" id="syncStatus">✅ 機台資料已同步</div>
+
+            <!-- 🆕 可編輯欄位提示 -->
+            <div class="editable-hint" id="editableHint">
+                💡 油槽容量與目標濃度已載入上次數值，可自由修改
+            </div>
+
+            <!-- 註冊表單 -->
+            <div class="register-form" id="registerForm">
+                <div class="welcome-message">
+                    <h2>👋 歡迎使用</h2>
+                    <p>首次使用請填寫基本資料</p>
+                </div>
+
+                <!-- 身份選擇 -->
+                <div class="identity-selector">
+                    <div class="identity-card" data-identity="internal">
+                        <div class="icon">👷</div>
+                        <div class="title">內部員工</div>
+                        <div class="desc">操作員/管理員/工程師</div>
+                    </div>
+                    <div class="identity-card" data-identity="vendor">
+                        <div class="icon">👤</div>
+                        <div class="title">外部訪客</div>
+                        <div class="desc">供應商人員</div>
+                    </div>
+                </div>
+
+                <!-- 內部員工表單 -->
+                <div class="dynamic-form" id="internalForm">
+                    <form id="internalRegistrationForm">
+                        <div class="form-group">
+                            <label>姓名 <span class="required">*</span></label>
+                            <input 
+                                type="text" 
+                                id="internalRealName" 
+                                placeholder="請輸入您的姓名（例：張三）"
+                                required
+                                maxlength="20"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label>公司 <span class="required">*</span></label>
+                            <select id="companyName" required>
+                                <option value="">請選擇公司</option>
+                            </select>
+                            <p class="help-text">您所屬的公司</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label>角色 <span class="required">*</span></label>
+                            <select id="internalRole" required>
+                                <option value="操作員">操作員</option>
+                                <option value="管理員">管理員</option>
+                                <option value="工程師">工程師</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            完成註冊
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 外部訪客表單 -->
+                <div class="dynamic-form" id="vendorForm">
+                    <form id="vendorRegistrationForm">
+                        <div class="form-group">
+                            <label>姓名 <span class="required">*</span></label>
+                            <input 
+                                type="text" 
+                                id="vendorRealName" 
+                                placeholder="請輸入您的姓名（例：李四）"
+                                required
+                                maxlength="20"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label>供應商 <span class="required">*</span></label>
+                            <select id="vendorName" required>
+                                <option value="">請選擇供應商</option>
+                            </select>
+                            <p class="help-text">您所屬的供應商公司</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label>角色</label>
+                            <input 
+                                type="text" 
+                                value="訪客" 
+                                readonly
+                                style="background-color: #e9ecef; cursor: not-allowed;"
+                            >
+                            <p class="help-text">外部人員預設為訪客角色</p>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            完成註冊
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 檢測表單 -->
+            <div class="inspection-form" id="inspectionForm">
+                <div class="user-info" id="userInfo">
+                    <!-- 使用者資訊將由 JavaScript 填充 -->
+                </div>
+
+                <form id="inspectionFormData">
+                    <!-- 基本資訊 -->
+                    <div class="form-group">
+                        <label>機台編號 <span class="required">*</span></label>
+                        <input type="text" id="machineId" placeholder="例：M2025-001" required>
+                        <!-- ⭐ v15.3: 查看歷史走勢按鈕 -->
+                        <button type="button" class="chart-btn" id="viewChartBtn" style="display:none;">
+                            📊 查看歷史走勢
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label>機台名稱</label>
+                        <input type="text" id="machineName" placeholder="例：Mazak 臥加1">
+                    </div>
+
+                    <div class="form-group">
+                        <label>廠商名稱</label>
+                        <input type="text" id="vendorNameField" placeholder="例：大正科技">
+                    </div>
+
+                    <!-- 檢測數據 -->
+                    <div class="form-group">
+                        <label>切削液種類 <span class="required">*</span></label>
+                        <select id="oilType" required>
+                            <option value="">請選擇切削液種類</option>
+                            <option value="選項 1：全合成 (Fully Synthetic)">選項 1：全合成 (Fully Synthetic)</option>
+                            <option value="選項 2：半合成 (Semi-Synthetic)">選項 2：半合成 (Semi-Synthetic)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>pH 值 <span class="required">*</span></label>
+                        <input type="number" id="phValue" step="0.1" min="0" max="14" placeholder="例：8.5" required>
+                        <div id="phHint" class="help-text">正常範圍：8.5 - 9.5</div>
+                        <div id="phLastValue" class="last-value-hint"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>糖度計讀數 (%) <span class="required">*</span></label>
+                        <input type="number" id="brixReading" step="0.1" min="0" placeholder="例：5.0" required>
+                        <div id="brixHint" class="help-text">正常範圍：3.0 - 5.0%</div>
+                        <div id="brixLastValue" class="last-value-hint"></div>
+                    </div>
+
+                    <!-- 🔥 油槽容量：可編輯 + 顯示上次數值 -->
+                    <div class="form-group">
+                        <label>油槽容量 (L) <span class="required">*</span></label>
+                        <input type="number" id="tankSize" step="1" min="0" placeholder="例：1000" required>
+                        <div id="tankSizeHint" class="editable-label"></div>
+                    </div>
+
+                    <!-- 🔥 目標濃度：可編輯 + 顯示上次數值 -->
+                    <div class="form-group">
+                        <label>目標濃度 (%)</label>
+                        <input type="number" id="targetConc" step="0.1" min="0" placeholder="例：7.0（0 表示使用系統預設）">
+                        <div id="targetConcHint" class="editable-label"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>導電度 (μS/cm)</label>
+                        <input type="number" id="conductivity" step="1" min="0" placeholder="例：850（0 表示未測量）">
+                    </div>
+
+                    <!-- 細菌檢測 -->
+                    <div class="form-group">
+                        <label>💧 雙氧水氣泡測試</label>
+                        <select id="bubbleResult">
+                            <option value="請選擇">請選擇</option>
+                            <option value="選項 1：無氣泡/微量氣泡（Level 1 - 安全）">選項 1：無氣泡/微量氣泡（Level 1 - 安全）</option>
+                            <option value="選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）">選項 2：少量氣泡（汽水狀）（Level 2 - 輕微感染）</option>
+                            <option value="選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）">選項 3：持續冒泡（明顯反應）（Level 3 - 中度感染）</option>
+                            <option value="選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）">選項 4：大量氣泡（啤酒泡沫狀）（Level 4 - 嚴重感染）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>🧪 Dr. Coolant 細菌顯影</label>
+                        <select id="resazurinColor">
+                            <option value="請選擇">請選擇</option>
+                            <option value="選項 1：🔵 藍色（Level 1 - 安全）">選項 1：🔵 藍色（Level 1 - 安全）</option>
+                            <option value="選項 2：🟣 紫色（Level 2 - 輕微感染）">選項 2：🟣 紫色（Level 2 - 輕微感染）</option>
+                            <option value="選項 3：🌸 粉紅色（Level 3 - 中度感染）">選項 3：🌸 粉紅色（Level 3 - 中度感染）</option>
+                            <option value="選項 4：⚪ 無色透明（Level 4 - 嚴重感染）">選項 4：⚪ 無色透明（Level 4 - 嚴重感染）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>觀察症狀</label>
+                        <textarea id="symptoms" placeholder="例：發臭、變色、浮油等（選填）"></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        🚀 提交檢測
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ⭐ v15.3: 圖表 Modal -->
+    <div class="modal" id="chartModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 歷史趨勢分析</h2>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="chart-title">pH 值趨勢</div>
+                <div class="chart-container">
+                    <canvas id="phChart"></canvas>
+                </div>
+
+                <div class="chart-title">糖度趨勢</div>
+                <div class="chart-container">
+                    <canvas id="brixChart"></canvas>
+                </div>
+
+                <p style="text-align: center; color: #666; font-size: 12px; margin-top: 20px;">
+                    💡 提示：圖表顯示最近 7 天的檢測數據
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 配置區 ==========
+        const CONFIG = {
+            LIFF_ID: '2008738088-3ae3t9Qw',
+            SUPABASE_URL: 'https://zqufrfytzfgpargbzdlk.supabase.co',
+            SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpxdWZyZnl0emZncGFyZ2J6ZGxrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5MjEyODksImV4cCI6MjA4MzQ5NzI4OX0.hdRcP-qgtxuLAyvSg1X7X3l4o1zkgyDuEXFZDmR1YuI',
+            WEBHOOK_URL: 'https://eo9xer4x4f4gjfi.m.pipedream.net/'
+        };
+
+        // ========== 全域變數 ==========
+        let liffProfile = null;
+        let userData = null;
+        let machineData = null;
+        let selectedIdentity = null;
+        let companiesList = [];
+        let vendorsList = [];
+        let phChart = null;
+        let brixChart = null;
+
+        // ========== DOM 元素 ==========
+        const elements = {
+            loadingScreen: document.getElementById('loadingScreen'),
+            loadingText: document.getElementById('loadingText'),
+            errorMessage: document.getElementById('errorMessage'),
+            successMessage: document.getElementById('successMessage'),
+            syncStatus: document.getElementById('syncStatus'),
+            editableHint: document.getElementById('editableHint'),
+            registerForm: document.getElementById('registerForm'),
+            inspectionForm: document.getElementById('inspectionForm'),
+            userInfo: document.getElementById('userInfo'),
+            internalForm: document.getElementById('internalForm'),
+            vendorForm: document.getElementById('vendorForm'),
+            chartModal: document.getElementById('chartModal'),
+            viewChartBtn: document.getElementById('viewChartBtn'),
+            closeModal: document.getElementById('closeModal')
+        };
+
+        // ========== 工具函式 ==========
+        
+        function updateLoadingText(text) {
+            elements.loadingText.textContent = text;
+        }
+
+        function showError(message) {
+            elements.errorMessage.textContent = message;
+            elements.errorMessage.classList.add('active');
+            setTimeout(() => elements.errorMessage.classList.remove('active'), 5000);
+        }
+
+        function showSuccess(message) {
+            elements.successMessage.textContent = message;
+            elements.successMessage.classList.add('active');
+            setTimeout(() => elements.successMessage.classList.remove('active'), 5000);
+        }
+
+        function showSyncStatus() {
+            elements.syncStatus.classList.add('show');
+            setTimeout(() => elements.syncStatus.classList.remove('show'), 3000);
+        }
+
+        function showEditableHint() {
+            elements.editableHint.classList.add('show');
+            setTimeout(() => elements.editableHint.classList.remove('show'), 5000);
+        }
+
+        function markFilled(el) {
+            if (el && el.value && el.value.trim() !== '' && el.value !== '請選擇') {
+                el.classList.add('is-filled');
+            }
+        }
+
+        function cleanTestResult(value) {
+            const emptyValues = ['', '請選擇', '未選擇', 'null', 'undefined'];
+            return emptyValues.includes(value) ? '未檢測' : value;
+        }
+
+        function updateHints() {
+            const oilType = document.getElementById('oilType').value;
+            const phHint = document.getElementById('phHint');
+            const brixHint = document.getElementById('brixHint');
+
+            if (oilType.includes('選項 1')) {
+                phHint.textContent = '正常範圍：8.5 - 9.5';
+                brixHint.textContent = '正常範圍：4.0 - 6.0%';
+            } else if (oilType.includes('選項 2')) {
+                phHint.textContent = '正常範圍：8.8 - 9.5';
+                brixHint.textContent = '正常範圍：6.0 - 8.0%';
+            }
+        }
+
+        // ========== ⭐ v15.3: 圖表功能 ==========
+        
+        // 開啟圖表 Modal
+        elements.viewChartBtn.addEventListener('click', async () => {
+            const machineId = document.getElementById('machineId').value.trim();
+            if (!machineId) {
+                showError('請先輸入機台編號');
+                return;
+            }
+
+            elements.chartModal.classList.add('active');
+            await loadChartData(machineId);
+        });
+
+        // 關閉 Modal
+        elements.closeModal.addEventListener('click', () => {
+            elements.chartModal.classList.remove('active');
+        });
+
+        // 點擊 Modal 背景關閉
+        elements.chartModal.addEventListener('click', (e) => {
+            if (e.target === elements.chartModal) {
+                elements.chartModal.classList.remove('active');
+            }
+        });
+
+        // 載入圖表資料
+        async function loadChartData(machineId) {
+            try {
+                // 查詢最近 7 天的檢測資料
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/daily_logs?machine_id=eq.${machineId}&created_at=gte.${sevenDaysAgo.toISOString()}&order=created_at.asc`,
+                    {
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                        }
+                    }
+                );
+
+                if (response.ok) {
+                    const data = await response.json();
+                    renderCharts(data);
+                } else {
+                    showError('無法載入歷史資料');
+                }
+            } catch (error) {
+                console.error('載入圖表資料錯誤:', error);
+                showError('載入圖表資料失敗');
+            }
+        }
+
+        // 渲染圖表
+        function renderCharts(data) {
+            if (data.length === 0) {
+                showError('此機台尚無歷史資料');
+                return;
+            }
+
+            // 準備資料
+            const labels = data.map(d => {
+                const date = new Date(d.created_at);
+                return `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+            });
+            const phValues = data.map(d => d.ph_value);
+            const brixValues = data.map(d => d.brix_reading);
+
+            // 銷毀舊圖表
+            if (phChart) phChart.destroy();
+            if (brixChart) brixChart.destroy();
+
+            // pH 值圖表
+            const phCtx = document.getElementById('phChart').getContext('2d');
+            phChart = new Chart(phCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'pH 值',
+                        data: phValues,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `pH: ${context.parsed.y}`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 7,
+                            max: 10,
+                            ticks: { stepSize: 0.5 }
+                        }
+                    }
+                }
+            });
+
+            // 糖度圖表
+            const brixCtx = document.getElementById('brixChart').getContext('2d');
+            brixChart = new Chart(brixCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '糖度 (%)',
+                        data: brixValues,
+                        borderColor: '#f5576c',
+                        backgroundColor: 'rgba(245, 87, 108, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => `糖度: ${context.parsed.y}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 0,
+                            max: 10,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== 載入公司與供應商選項 ==========
+        async function loadMachinesOptions() {
+            try {
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/machines?select=company_name,vendor`,
+                    {
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                        }
+                    }
+                );
+
+                if (response.ok) {
+                    const machines = await response.json();
+                    
+                    companiesList = [...new Set(machines.map(m => m.company_name).filter(Boolean))];
+                    vendorsList = [...new Set(machines.map(m => m.vendor).filter(Boolean))];
+
+                    const companySelect = document.getElementById('companyName');
+                    companiesList.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company;
+                        option.textContent = company;
+                        companySelect.appendChild(option);
+                    });
+
+                    const vendorSelect = document.getElementById('vendorName');
+                    vendorsList.forEach(vendor => {
+                        const option = document.createElement('option');
+                        option.value = vendor;
+                        option.textContent = vendor;
+                        vendorSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('載入機台選項錯誤:', error);
+            }
+        }
+
+        // ========== 身份選擇邏輯 ==========
+        function setupIdentitySelector() {
+            const cards = document.querySelectorAll('.identity-card');
+            
+            cards.forEach(card => {
+                card.addEventListener('click', () => {
+                    cards.forEach(c => c.classList.remove('selected'));
+                    card.classList.add('selected');
+                    selectedIdentity = card.dataset.identity;
+
+                    elements.internalForm.classList.remove('active');
+                    elements.vendorForm.classList.remove('active');
+
+                    if (selectedIdentity === 'internal') {
+                        elements.internalForm.classList.add('active');
+                    } else if (selectedIdentity === 'vendor') {
+                        elements.vendorForm.classList.add('active');
+                    }
+                });
+            });
+        }
+
+        // ========== LIFF 初始化 ==========
+        async function initializeLiff() {
+            try {
+                updateLoadingText('正在初始化 LIFF...');
+                await liff.init({ liffId: CONFIG.LIFF_ID });
+
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return;
+                }
+
+                updateLoadingText('正在取得使用者資訊...');
+                liffProfile = await liff.getProfile();
+
+                updateLoadingText('正在載入選項...');
+                await loadMachinesOptions();
+
+                updateLoadingText('正在檢查使用者狀態...');
+                const exists = await checkUserExists(liffProfile.userId);
+
+                if (!exists) {
+                    showRegistrationForm();
+                } else {
+                    updateLoadingText('正在載入使用者資料...');
+                    userData = await loadUserData(liffProfile.userId);
+                    
+                    updateLoadingText('正在載入機台資料...');
+                    await loadMachineData();
+                    
+                    showInspectionForm();
+                }
+            } catch (error) {
+                console.error('LIFF 初始化錯誤:', error);
+                showError('系統初始化失敗，請重新整理頁面');
+            }
+        }
+
+        // ========== 使用者管理 ==========
+        
+        async function checkUserExists(userId) {
+            try {
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/users?user_id=eq.${userId}`,
+                    {
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                        }
+                    }
+                );
+
+                if (!response.ok) throw new Error('無法檢查使用者狀態');
+                const data = await response.json();
+                return data.length > 0;
+            } catch (error) {
+                console.error('檢查使用者錯誤:', error);
+                return false;
+            }
+        }
+
+        async function loadUserData(userId) {
+            try {
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/users?user_id=eq.${userId}`,
+                    {
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                        }
+                    }
+                );
+
+                if (!response.ok) throw new Error('無法載入使用者資料');
+                const data = await response.json();
+                
+                await updateLastLogin(userId);
+                return data[0];
+            } catch (error) {
+                console.error('載入使用者資料錯誤:', error);
+                showError('載入使用者資料失敗');
+                return null;
+            }
+        }
+
+        async function updateLastLogin(userId) {
+            try {
+                await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/users?user_id=eq.${userId}`,
+                    {
+                        method: 'PATCH',
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ last_login: new Date().toISOString() })
+                    }
+                );
+            } catch (error) {
+                console.error('更新登入時間錯誤:', error);
+            }
+        }
+
+        // ========== 🔥 機台資料載入（可編輯版本）==========
+        async function loadMachineData() {
+            const params = new URLSearchParams(window.location.search);
+            let mid = params.get('machine_id');
+
+            if (!mid && liff.getContext()) {
+                try {
+                    const ctx = liff.getContext();
+                    if (ctx && ctx.endpointUrl) {
+                        const url = new URL(ctx.endpointUrl);
+                        mid = url.searchParams.get('machine_id');
+                    }
+                } catch (e) {
+                    console.log('無法從 LIFF Context 取得 machine_id');
+                }
+            }
+
+            if (mid) {
+                document.getElementById('machineId').value = mid;
+                document.getElementById('machineId').classList.add('locked-input', 'is-filled');
+                document.getElementById('machineId').readOnly = true;
+                
+                // ⭐ v15.3: 顯示查看圖表按鈕
+                elements.viewChartBtn.style.display = 'inline-block';
+
+                try {
+                    const response = await fetch(
+                        `${CONFIG.SUPABASE_URL}/rest/v1/machines?machine_id=eq.${mid}`,
+                        {
+                            headers: {
+                                'apikey': CONFIG.SUPABASE_KEY,
+                                'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                            }
+                        }
+                    );
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data && data.length > 0) {
+                            machineData = data[0];
+                            fillMachineData(machineData);
+                            showSyncStatus();
+                            showEditableHint();
+                        }
+                    }
+                } catch (e) {
+                    console.error('機台資料載入失敗', e);
+                }
+            }
+        }
+
+        // 🔥 修改後的 fillMachineData：capacity 和 target_conc 可編輯
+        function fillMachineData(data) {
+            // 只鎖定機台名稱與廠商名稱
+            const setAndLock = (id, value) => {
+                const el = document.getElementById(id);
+                if (el && value != null && value !== '') {
+                    el.value = value;
+                    el.classList.add('locked-input', 'is-filled');
+                    el.readOnly = true;
+                }
+            };
+
+            setAndLock('machineName', data.machine_name);
+            setAndLock('vendorNameField', data.vendor);
+
+            // 🔥 油槽容量：可編輯，但顯示上次數值
+            const tankSizeEl = document.getElementById('tankSize');
+            const tankSizeHint = document.getElementById('tankSizeHint');
+            if (data.capacity != null && data.capacity !== '') {
+                tankSizeEl.value = data.capacity;
+                tankSizeEl.classList.add('editable-with-history');
+                tankSizeHint.textContent = `✏️ 上次：${data.capacity} L（可修改）`;
+                markFilled(tankSizeEl);
+            }
+
+            // 🔥 目標濃度：可編輯，但顯示上次數值
+            const targetConcEl = document.getElementById('targetConc');
+            const targetConcHint = document.getElementById('targetConcHint');
+            if (data.target_conc != null && data.target_conc !== '') {
+                targetConcEl.value = data.target_conc;
+                targetConcEl.classList.add('editable-with-history');
+                targetConcHint.textContent = `✏️ 上次：${data.target_conc}%（可修改）`;
+                markFilled(targetConcEl);
+            }
+
+            // 油品種類仍保持鎖定
+            if (data.oil_code) {
+                const oilType = document.getElementById('oilType');
+                const code = String(data.oil_code).trim();
+                if (code === '1') {
+                    oilType.value = '選項 1：全合成 (Fully Synthetic)';
+                } else if (code === '2') {
+                    oilType.value = '選項 2：半合成 (Semi-Synthetic)';
+                }
+                markFilled(oilType);
+                updateHints();
+            }
+
+            // pH 與糖度提示
+            if (data.last_ph) {
+                document.getElementById('phLastValue').textContent = `💡 上次：pH ${data.last_ph}`;
+            }
+            if (data.last_brix) {
+                document.getElementById('brixLastValue').textContent = `💡 上次：${data.last_brix}%`;
+            }
+        }
+
+        // ========== 顯示畫面 ==========
+        
+        function showRegistrationForm() {
+            elements.loadingScreen.classList.remove('active');
+            elements.loadingScreen.classList.add('hidden');
+            elements.registerForm.classList.add('active');
+            setupIdentitySelector();
+        }
+
+        function showInspectionForm() {
+            elements.loadingScreen.classList.remove('active');
+            elements.loadingScreen.classList.add('hidden');
+            elements.inspectionForm.classList.add('active');
+
+            const isInternal = userData.is_internal;
+            const userInfoClass = isInternal ? '' : 'vendor';
+            const companyDisplay = isInternal ? 
+                `<p><strong>🏢 公司：</strong>${userData.company_name || '未設定'}</p>` :
+                `<p><strong>🏭 供應商：</strong>${userData.vendor_name || '未設定'}</p>`;
+
+            elements.userInfo.className = `user-info ${userInfoClass}`;
+            elements.userInfo.innerHTML = `
+                <p><strong>👤 操作人員：</strong>${userData.real_name}</p>
+                ${companyDisplay}
+                <p><strong>👔 角色：</strong>${userData.role}</p>
+            `;
+
+            if (isInternal && userData.company_name) {
+                const vendorField = document.getElementById('vendorNameField');
+                if (!vendorField.readOnly) {
+                    vendorField.value = userData.company_name;
+                }
+            }
+        }
+
+        // ========== 註冊表單處理 ==========
+        
+        document.getElementById('internalRegistrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const realName = document.getElementById('internalRealName').value.trim();
+            const companyName = document.getElementById('companyName').value;
+            const role = document.getElementById('internalRole').value;
+
+            if (!realName || !companyName) {
+                showError('請填寫所有必填欄位');
+                return;
+            }
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '註冊中...';
+
+            try {
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/users`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation'
+                        },
+                        body: JSON.stringify({
+                            user_id: liffProfile.userId,
+                            real_name: realName,
+                            role: role,
+                            is_internal: true,
+                            company_name: companyName,
+                            company_code: null,
+                            vendor_name: null,
+                            last_login: new Date().toISOString()
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || '註冊失敗');
+                }
+
+                const data = await response.json();
+                userData = data[0];
+
+                showSuccess('註冊成功！');
+                await loadMachineData();
+
+                setTimeout(() => {
+                    elements.registerForm.classList.remove('active');
+                    showInspectionForm();
+                }, 1000);
+
+            } catch (error) {
+                console.error('註冊錯誤:', error);
+                showError('註冊失敗：' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '完成註冊';
+            }
+        });
+
+        document.getElementById('vendorRegistrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const realName = document.getElementById('vendorRealName').value.trim();
+            const vendorName = document.getElementById('vendorName').value;
+
+            if (!realName || !vendorName) {
+                showError('請填寫所有必填欄位');
+                return;
+            }
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '註冊中...';
+
+            try {
+                const response = await fetch(
+                    `${CONFIG.SUPABASE_URL}/rest/v1/users`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'apikey': CONFIG.SUPABASE_KEY,
+                            'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                            'Content-Type': 'application/json',
+                            'Prefer': 'return=representation'
+                        },
+                        body: JSON.stringify({
+                            user_id: liffProfile.userId,
+                            real_name: realName,
+                            role: '訪客',
+                            is_internal: false,
+                            company_name: null,
+                            company_code: null,
+                            vendor_name: vendorName,
+                            last_login: new Date().toISOString()
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || '註冊失敗');
+                }
+
+                const data = await response.json();
+                userData = data[0];
+
+                showSuccess('註冊成功！');
+                await loadMachineData();
+
+                setTimeout(() => {
+                    elements.registerForm.classList.remove('active');
+                    showInspectionForm();
+                }, 1000);
+
+            } catch (error) {
+                console.error('註冊錯誤:', error);
+                showError('註冊失敗：' + error.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = '完成註冊';
+            }
+        });
+
+        // ========== 檢測表單處理 ==========
+        document.getElementById('inspectionFormData').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const machineId = document.getElementById('machineId').value.trim();
+            const phValue = parseFloat(document.getElementById('phValue').value) || 0;
+            const brixReading = parseFloat(document.getElementById('brixReading').value) || 0;
+            const tankSize = parseFloat(document.getElementById('tankSize').value) || 0;
+            const oilType = document.getElementById('oilType').value;
+            
+            const bubbleResult = cleanTestResult(document.getElementById('bubbleResult').value);
+            const resazurinColor = cleanTestResult(document.getElementById('resazurinColor').value);
+
+            const formData = {
+                userId: liffProfile.userId,
+                realName: userData.real_name,
+                role: userData.role,
+                isInternal: userData.is_internal,
+                companyName: userData.is_internal ? userData.company_name : null,
+                vendorName: !userData.is_internal ? userData.vendor_name : null,
+                
+                machineId: machineId,
+                machineName: document.getElementById('machineName').value.trim() || '未提供',
+                vendorNameField: document.getElementById('vendorNameField').value.trim() || '未設定',
+                
+                oilType: oilType,
+                phValue: phValue,
+                brixReading: brixReading,
+                tankSize: tankSize,
+                targetConc: parseFloat(document.getElementById('targetConc').value) || 0,
+                conductivity: parseFloat(document.getElementById('conductivity').value) || 0,
+                bubbleResult: bubbleResult,
+                resazurinColor: resazurinColor,
+                symptoms: document.getElementById('symptoms').value || ''
+            };
+
+            if (!machineId || !oilType) {
+                showError('請填寫所有必填欄位');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '提交中...';
+
+            try {
+                // 更新機台資料（包含 capacity 和 target_conc）
+                if (machineData) {
+                    const oilCode = oilType.includes('選項 1') ? '1' : '2';
+                    await fetch(
+                        `${CONFIG.SUPABASE_URL}/rest/v1/machines?machine_id=eq.${machineId}`,
+                        {
+                            method: 'PATCH',
+                            headers: {
+                                'apikey': CONFIG.SUPABASE_KEY,
+                                'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                capacity: tankSize,
+                                target_conc: formData.targetConc,
+                                oil_code: oilCode,
+                                last_ph: phValue,
+                                last_brix: brixReading,
+                                last_checked: new Date().toISOString()
+                            })
+                        }
+                    );
+                }
+
+                const response = await fetch(CONFIG.WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) throw new Error('提交失敗');
+
+                showSuccess('檢測資料已提交！報告將透過 LINE 發送給您。');
+
+                setTimeout(() => {
+                    if (liff.isInClient()) {
+                        liff.closeWindow();
+                    }
+                }, 2000);
+
+            } catch (error) {
+                console.error('提交錯誤:', error);
+                showError('提交失敗，請重試');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 提交檢測';
+            }
+        });
+
+        // ========== 事件監聽 ==========
+        document.getElementById('oilType').addEventListener('change', updateHints);
+
+        document.querySelectorAll('.form-control, .form-select').forEach(el => {
+            el.addEventListener('input', () => markFilled(el));
+            el.addEventListener('change', () => markFilled(el));
+        });
+
+        // ⭐ v15.3: 機台編號變更時顯示/隱藏圖表按鈕
+        document.getElementById('machineId').addEventListener('input', (e) => {
+            const machineId = e.target.value.trim();
+            elements.viewChartBtn.style.display = machineId ? 'inline-block' : 'none';
+        });
+
+        // ========== 頁面載入 ==========
+        window.addEventListener('DOMContentLoaded', () => {
+            initializeLiff();
+        });
+    </script>
+</body>
+</html>
